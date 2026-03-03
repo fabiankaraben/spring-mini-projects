@@ -16,9 +16,9 @@ This is a basic Spring Boot backend serving a single `GET` endpoint that returns
    cd basic/01-hello-world-http-server
    ```
 
-2. Compile and run the application using Maven. You can use your local Maven installation (`mvn`):
+2. Compile and run the application using the generated Maven Wrapper (`./mvnw`). You can also use your local Maven installation (`mvn`):
    ```bash
-   mvn spring-boot:run
+   ./mvnw spring-boot:run
    ```
 
 3. Open a new terminal window and use `curl` to test the API endpoint. The default server port is configured to `8080`.
@@ -47,5 +47,5 @@ This basic application showcases the most critical levels of testing in a Spring
 
 To execute all the test cases, run:
 ```bash
-mvn test
+./mvnw test
 ```
