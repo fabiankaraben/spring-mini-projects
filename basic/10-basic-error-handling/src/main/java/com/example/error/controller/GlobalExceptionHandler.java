@@ -10,7 +10,6 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 import java.net.URI;
 import java.time.Instant;
-import java.util.Objects;
 
 /**
  * Global exception handler using @RestControllerAdvice.
