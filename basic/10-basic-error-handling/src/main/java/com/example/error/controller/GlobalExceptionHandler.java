@@ -38,7 +38,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
         // Add custom properties and URI type according to RFC 7807
         problemDetail.setTitle("Product Not Found");
-        problemDetail.setType(Objects.requireNonNull(URI.create("https://example.com/problems/product-not-found")));
+        problemDetail.setType(URI.create("https://example.com/problems/product-not-found"));
         problemDetail.setProperty("timestamp", Instant.now());
 
         return problemDetail;
@@ -58,7 +58,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
         // Add custom properties and URI type according to RFC 7807
         problemDetail.setTitle("Invalid Product Details");
-        problemDetail.setType(Objects.requireNonNull(URI.create("https://example.com/problems/invalid-product")));
+        problemDetail.setType(URI.create("https://example.com/problems/invalid-product"));
         problemDetail.setProperty("timestamp", Instant.now());
 
         return problemDetail;
