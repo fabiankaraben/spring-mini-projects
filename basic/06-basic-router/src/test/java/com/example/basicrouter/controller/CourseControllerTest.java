@@ -77,6 +77,7 @@ class CourseControllerTest {
     }
 
     @Test
+    @SuppressWarnings("null")
     void shouldCreateCourse() throws Exception {
         // Arrange
         Course inputCourse = new Course(null, "New Course", "New Desc");
@@ -93,6 +94,7 @@ class CourseControllerTest {
     }
 
     @Test
+    @SuppressWarnings("null")
     void shouldUpdateCourse() throws Exception {
         // Arrange
         Course inputCourse = new Course(1L, "Updated Course", "Updated Desc");
@@ -107,6 +109,7 @@ class CourseControllerTest {
     }
 
     @Test
+    @SuppressWarnings("null")
     void shouldReturnNotFoundWhenUpdatingNonExistentCourse() throws Exception {
         // Arrange
         Course inputCourse = new Course(99L, "Updated Course", "Updated Desc");
