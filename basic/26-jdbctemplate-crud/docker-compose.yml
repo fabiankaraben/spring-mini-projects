@@ -1,0 +1,34 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: jdbctemplate-postgres
+    environment:
+      POSTGRES_USER: springuser
+      POSTGRES_PASSWORD: springpassword
+      POSTGRES_DB: jdbctemplatedb
+    ports:
+      - "5432:5432"
+    volumes:
+      - jdbctemplate-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U springuser -d jdbctemplatedb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: jdbctemplate-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/jdbctemplatedb
+      - SPRING_DATASOURCE_USERNAME=springuser
+      - SPRING_DATASOURCE_PASSWORD=springpassword
+
+volumes:
+  jdbctemplate-postgres-data:
