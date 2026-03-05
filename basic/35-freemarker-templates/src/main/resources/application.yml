@@ -1,0 +1,38 @@
+# Application configuration for the Freemarker Templates mini-project
+
+spring:
+  application:
+    name: freemarker-templates
+
+  # FreeMarker configuration
+  # Spring Boot auto-configures FreeMarker via FreeMarkerAutoConfiguration.
+  # The settings below are the defaults; they are declared explicitly here
+  # to make the configuration self-documenting.
+  freemarker:
+    # Templates are located under src/main/resources/templates/ by default.
+    template-loader-path: classpath:/templates/
+
+    # File extension for FreeMarker HTML templates.
+    # .ftlh is the recommended extension for HTML output; it tells IDEs and
+    # linters to apply HTML syntax highlighting alongside FreeMarker directives.
+    suffix: .ftlh
+
+    # Encoding used when reading template files from disk
+    charset: UTF-8
+
+    # Output encoding for the rendered HTTP response
+    content-type: text/html;charset=UTF-8
+
+    # Disable the template cache in development so that changes to .ftlh files
+    # are reflected immediately without restarting the server.
+    # In production this should be set to true for performance.
+    cache: false
+
+# Server configuration
+server:
+  port: 8080
+
+# Logging: show INFO-level logs from our package
+logging:
+  level:
+    com.example.freemarker: INFO
