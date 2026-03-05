@@ -1,0 +1,21 @@
+# Application configuration for the Basic Caching mini-project
+
+spring:
+  application:
+    name: basic-caching
+
+  # Cache configuration
+  cache:
+    # Using 'simple' type means Spring uses ConcurrentMapCacheManager.
+    # This is actually the default when spring-boot-starter-cache is on the classpath
+    # and no other provider is detected. Declaring it explicitly makes the choice clear.
+    type: simple
+
+# Server port (default is 8080, declared here for documentation purposes)
+server:
+  port: 8080
+
+# Logging configuration: show INFO-level logs from our package
+logging:
+  level:
+    com.example.basiccaching: INFO
