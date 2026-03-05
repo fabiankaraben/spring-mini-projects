@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<!--
+    Not-found page template.
+
+    Rendered when the user requests a product ID that does not exist.
+    The controller adds a 'message' attribute to the model explaining what
+    was not found.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Not Found | Thymeleaf Basic UI</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        nav {
+            background: #1a1a2e;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        nav .brand {
+            color: #e94560;
+            font-size: 1.4rem;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        nav a {
+            color: #ccc;
+            text-decoration: none;
+            margin-left: 1.5rem;
+        }
+
+        nav a:hover {
+            color: #fff;
+        }
+
+        .center {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .emoji {
+            font-size: 5rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin: 1rem 0 0.5rem;
+            color: #1a1a2e;
+        }
+
+        /* th:text will replace this default text with the model's 'message' value */
+        .msg {
+            color: #666;
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.75rem;
+            background: #e94560;
+            color: #fff;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #b5001f;
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav>
+        <a class="brand" th:href="@{/}">🛍️ Product Catalog</a>
+        <div>
+            <a th:href="@{/}">Home</a>
+            <a th:href="@{/products/in-stock}">In Stock</a>
+        </div>
+    </nav>
+
+    <div class="center">
+        <div class="emoji">🔍</div>
+        <h1>Not Found</h1>
+
+        <!--
+        th:text replaces the paragraph's text with the 'message' model attribute
+        set by the controller when a product ID is not found.
+    -->
+        <p class="msg" th:text="${message}">The requested resource could not be found.</p>
+
+        <a class="btn" th:href="@{/}">← Back to Catalog</a>
+    </div>
+
+</body>
+
+</html>

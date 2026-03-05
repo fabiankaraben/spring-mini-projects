@@ -1,0 +1,32 @@
+# Application configuration for the Thymeleaf Basic UI mini-project
+
+spring:
+  application:
+    name: thymeleaf-basic-ui
+
+  # Thymeleaf configuration
+  thymeleaf:
+    # Templates are located under src/main/resources/templates/ by default.
+    # Declaring the prefix/suffix explicitly makes the configuration self-documenting.
+    prefix: classpath:/templates/
+    suffix: .html
+
+    # Encoding for rendered HTML pages
+    encoding: UTF-8
+
+    # Content-Type returned in HTTP responses
+    mode: HTML
+
+    # In development mode (default: false in production) Thymeleaf caches parsed
+    # templates to improve performance. Set to false during development so changes
+    # to .html files are picked up without restarting the server.
+    cache: false
+
+# Server configuration
+server:
+  port: 8080
+
+# Logging: show INFO-level logs from our package
+logging:
+  level:
+    com.example.thymeleafbasicui: INFO

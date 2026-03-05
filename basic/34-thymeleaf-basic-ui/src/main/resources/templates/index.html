@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<!--
+    Thymeleaf namespace declaration:
+    xmlns:th="http://www.thymeleaf.org"
+
+    This is required so that IDEs and parsers recognise the th:* attributes
+    as Thymeleaf expressions rather than invalid HTML attributes.
+
+    At runtime, Thymeleaf replaces every th:* attribute with its evaluated
+    result before sending the page to the browser.  The plain HTML fallback
+    values (e.g. href="#") keep the file viewable as static HTML in a browser
+    without the server running.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!--
+        th:text replaces the text content of the element with the expression
+        result.  Here the static "Product Catalog" text is the HTML fallback;
+        it is overwritten at runtime with the same value (a constant string).
+    -->
+    <title th:text="'Product Catalog | Thymeleaf Basic UI'">Product Catalog</title>
+
+    <!-- Inline CSS to keep the project self-contained (no external assets needed) -->
+    <style>
+        /* ---- Reset & base ---- */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            color: #333;
+            min-height: 100vh;
+        }
+
+        /* ---- Navigation ---- */
+        nav {
+            background: #1a1a2e;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        nav .brand {
+            color: #e94560;
+            font-size: 1.4rem;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        nav a {
+            color: #ccc;
+            text-decoration: none;
+            margin-left: 1.5rem;
+            transition: color 0.2s;
+        }
+
+        nav a:hover { color: #fff; }
+
+        /* ---- Page container ---- */
+        .container {
+            max-width: 1100px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        h1 { margin-bottom: 1.5rem; font-size: 1.8rem; color: #1a1a2e; }
+
+        /* ---- Category filter bar ---- */
+        .filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .filter-bar a {
+            padding: 0.4rem 1rem;
+            border-radius: 20px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            border: 2px solid #1a1a2e;
+            color: #1a1a2e;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .filter-bar a:hover,
+        .filter-bar a.active {
+            background: #1a1a2e;
+            color: #fff;
+        }
+
+        /* ---- Product grid ---- */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 1.25rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+        }
+
+        .card-category {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #e94560;
+            margin-bottom: 0.4rem;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: #1a1a2e;
+        }
+
+        .card-price {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #333;
+            margin-top: auto;
+            padding-top: 0.75rem;
+        }
+
+        /* ---- Stock badge ---- */
+        .badge {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            margin-top: 0.5rem;
+        }
+
+        .badge-in-stock  { background: #d4edda; color: #155724; }
+        .badge-out-stock { background: #f8d7da; color: #721c24; }
+
+        /* ---- Detail link ---- */
+        .card-link {
+            display: inline-block;
+            margin-top: 1rem;
+            color: #e94560;
+            font-weight: 600;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+
+        .card-link:hover { color: #b5001f; }
+
+        /* ---- Empty state ---- */
+        .empty {
+            text-align: center;
+            padding: 3rem;
+            color: #888;
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Navigation bar -->
+<nav>
+    <!--
+        th:href="@{/}" is a Thymeleaf link expression.
+        @{...} builds a context-relative URL, automatically prepending
+        the application's context path.  This is safer than hard-coding "/".
+    -->
+    <a class="brand" th:href="@{/}">🛍️ Product Catalog</a>
+    <div>
+        <a th:href="@{/}">Home</a>
+        <a th:href="@{/products/in-stock}">In Stock</a>
+    </div>
+</nav>
+
+<div class="container">
+    <h1>Product Catalog</h1>
+
+    <!-- ---- Category filter bar ---- -->
+    <!--
+        The filter bar is built dynamically from the 'categories' model attribute
+        added by the controller.  'All' is always shown first.
+    -->
+    <div class="filter-bar">
+
+        <!--
+            th:href="@{/}" links back to the unfiltered view.
+            th:classappend conditionally appends the "active" CSS class:
+              - If no category is selected (selectedCategory == null), this link
+                gets the "active" class.
+        -->
+        <a th:href="@{/}"
+           th:classappend="${selectedCategory == null} ? 'active' : ''">All</a>
+
+        <!--
+            th:each iterates over the 'categories' list.
+            For each iteration the variable 'cat' holds the current value.
+            The link URL is built with a query parameter: @{/(category=${cat})}
+            generates a URL like /?category=Electronics
+        -->
+        <a th:each="cat : ${categories}"
+           th:href="@{/(category=${cat})}"
+           th:text="${cat}"
+           th:classappend="${cat == selectedCategory} ? 'active' : ''">Category</a>
+    </div>
+
+    <!-- ---- Product grid ---- -->
+    <!--
+        th:if hides the grid entirely when the list is empty and shows the
+        empty-state message instead.
+    -->
+    <div class="grid" th:if="${not #lists.isEmpty(products)}">
+
+        <!--
+            th:each iterates over the 'products' model attribute.
+            Each card is rendered once per product.
+        -->
+        <div class="card" th:each="product : ${products}">
+
+            <!-- th:text replaces the element's text content with the field value -->
+            <div class="card-category" th:text="${product.category}">Category</div>
+            <div class="card-title"    th:text="${product.name}">Product Name</div>
+
+            <!--
+                th:text="${#numbers.formatDecimal(product.price, 1, 2)}" formats
+                the double as a decimal with at least 1 integer digit and exactly
+                2 fraction digits, e.g. "79.99".
+            -->
+            <div class="card-price"
+                 th:text="'$' + ${#numbers.formatDecimal(product.price, 1, 2)}">$0.00</div>
+
+            <!--
+                th:if / th:unless are complementary conditionals.
+                One renders the "In Stock" badge, the other the "Out of Stock" badge,
+                depending on the boolean field product.inStock.
+            -->
+            <span class="badge badge-in-stock"  th:if="${product.inStock}">In Stock</span>
+            <span class="badge badge-out-stock" th:unless="${product.inStock}">Out of Stock</span>
+
+            <!--
+                @{/products/{id}(id=${product.id})} is a Thymeleaf path-variable URL
+                expression.  It generates /products/1, /products/2, etc.
+            -->
+            <a class="card-link"
+               th:href="@{/products/{id}(id=${product.id})}">View Details →</a>
+        </div>
+    </div>
+
+    <!-- Empty state: shown when the product list is empty -->
+    <div class="empty" th:if="${#lists.isEmpty(products)}">
+        <p>No products found for this filter. <a th:href="@{/}">View all</a></p>
+    </div>
+
+</div>
+</body>
+</html>

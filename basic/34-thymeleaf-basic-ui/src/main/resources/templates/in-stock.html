@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<!--
+    In-stock products page template.
+
+    Demonstrates th:each iteration and the use of an iteration-status variable
+    (iterStat) to access metadata such as index, count, odd/even, first, last.
+-->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>In Stock | Thymeleaf Basic UI</title>
+
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            color: #333;
+            min-height: 100vh;
+        }
+
+        nav {
+            background: #1a1a2e;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        nav .brand {
+            color: #e94560;
+            font-size: 1.4rem;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        nav a {
+            color: #ccc;
+            text-decoration: none;
+            margin-left: 1.5rem;
+            transition: color 0.2s;
+        }
+
+        nav a:hover {
+            color: #fff;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            color: #1a1a2e;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Highlight even rows in the table using the iteration-status variable */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+        }
+
+        thead {
+            background: #1a1a2e;
+            color: #fff;
+        }
+
+        thead th {
+            padding: 1rem 1.25rem;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        tbody tr {
+            transition: background 0.15s;
+        }
+
+        tbody tr:hover {
+            background: #f5f7ff;
+        }
+
+        /* Alternating row background set dynamically via th:classappend */
+        tbody tr.even {
+            background: #fafafa;
+        }
+
+        tbody tr.even:hover {
+            background: #f0f2ff;
+        }
+
+        tbody td {
+            padding: 0.85rem 1.25rem;
+            border-bottom: 1px solid #e8e8e8;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .price {
+            font-weight: 600;
+        }
+
+        .badge-in-stock {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            background: #d4edda;
+            color: #155724;
+        }
+
+        a.detail-link {
+            color: #e94560;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        a.detail-link:hover {
+            color: #b5001f;
+        }
+
+        .count-badge {
+            display: inline-block;
+            background: #e94560;
+            color: #fff;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            padding: 0.2rem 0.75rem;
+            margin-left: 0.5rem;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav>
+        <a class="brand" th:href="@{/}">🛍️ Product Catalog</a>
+        <div>
+            <a th:href="@{/}">Home</a>
+            <a th:href="@{/products/in-stock}">In Stock</a>
+        </div>
+    </nav>
+
+    <div class="container">
+
+        <h1>
+            In-Stock Products
+            <!--
+            The count badge shows how many items are in the list.
+            ${#lists.size(products)} calls the utility method size() from
+            Thymeleaf's built-in #lists utility object.
+        -->
+            <span class="count-badge" th:text="${#lists.size(products)}">0</span>
+        </h1>
+
+        <p class="subtitle">These products are currently available for purchase.</p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Price</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <!--
+                th:each with an iteration-status variable:
+                  'product, iterStat : ${products}'
+                'iterStat' gives access to:
+                  - iterStat.index   → zero-based position
+                  - iterStat.count   → one-based position
+                  - iterStat.even    → true if count is even
+                  - iterStat.odd     → true if count is odd
+                  - iterStat.first   → true for the first element
+                  - iterStat.last    → true for the last element
+
+                th:classappend adds the "even" CSS class to every even row
+                to produce a striped-table effect without manual CSS nth-child
+                rules that wouldn't work across all browsers/scenarios.
+            -->
+                <tr th:each="product, iterStat : ${products}" th:classappend="${iterStat.even} ? 'even' : ''">
+
+                    <!-- Row number (1-based) from the iteration status -->
+                    <td th:text="${iterStat.count}">1</td>
+
+                    <td th:text="${product.name}">Name</td>
+                    <td th:text="${product.category}">Category</td>
+
+                    <td class="price" th:text="'$' + ${#numbers.formatDecimal(product.price, 1, 2)}">$0.00</td>
+
+                    <td><span class="badge-in-stock">In Stock</span></td>
+
+                    <td>
+                        <a class="detail-link" th:href="@{/products/{id}(id=${product.id})}">View →</a>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+    </div>
+</body>
+
+</html>
