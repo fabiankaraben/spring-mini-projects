@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  001-create-products-table.xml
+  =============================
+  Changeset 1: Creates the initial 'products' table.
+
+  Key Liquibase concepts demonstrated here:
+  - <changeSet id="..."> uniquely identifies this migration.
+    Liquibase records each applied id+author pair in the DATABASECHANGELOG table.
+    Once applied, this changeset will NEVER run again (unless you use the rollback command).
+  - <createTable> is a platform-independent way to define a table.
+    Liquibase translates it to the correct SQL for the target database
+    (PostgreSQL, H2, MySQL, etc.).
+  - <rollback> defines how to undo this changeset. Useful for migrations that
+    need to be reverted (e.g., during a failed deployment).
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="001" author="example">
+
+        <!--
+          createTable: Liquibase abstracts DML so the same changelog works
+          on PostgreSQL, H2 (used in tests) and other supported databases.
+        -->
+        <createTable tableName="products"
+                     remarks="Stores product catalogue items managed by Liquibase migrations.">
+
+            <!-- Auto-incrementing primary key.
+                 autoIncrement="true" maps to BIGSERIAL on PostgreSQL, IDENTITY on H2. -->
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+
+            <!-- Product name — required field -->
+            <column name="name" type="VARCHAR(150)">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- Price stored as DECIMAL to preserve precision -->
+            <column name="price" type="DECIMAL(10,2)">
+                <constraints nullable="false"/>
+            </column>
+
+        </createTable>
+
+        <!--
+          rollback: tells Liquibase how to UNDO this changeset.
+          If you run `liquibase rollback`, this table will be dropped.
+        -->
+        <rollback>
+            <dropTable tableName="products"/>
+        </rollback>
+
+    </changeSet>
+
+</databaseChangeLog>

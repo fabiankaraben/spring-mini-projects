@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  db/changelog/db.changelog-master.xml
+  ====================================
+  This is the Liquibase "master" changelog file.
+  Spring Boot auto-discovers it using the path configured in application.properties:
+      spring.liquibase.change-log=classpath:db/changelog/db.changelog-master.xml
+
+  This file acts as an orchestrator: it does NOT contain changesets directly.
+  Instead, it uses <include> tags to include individual versioned changelog files
+  in the correct order.
+
+  Why split into multiple files?
+  - Each file represents a migration "step" (similar to Flyway's Vx__ files).
+  - Splitting avoids one huge file and makes git history cleaner.
+  - Each changeset has a unique id + author pair; Liquibase tracks them in the
+    DATABASECHANGELOG table so that already-applied changesets are never re-run.
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Migration 1: Create the products table -->
+    <include file="db/changelog/changes/001-create-products-table.xml"/>
+
+    <!-- Migration 2: Insert initial seed data -->
+    <include file="db/changelog/changes/002-insert-initial-products.xml"/>
+
+    <!-- Migration 3: Add category column (schema evolution example) -->
+    <include file="db/changelog/changes/003-add-category-column.xml"/>
+
+</databaseChangeLog>

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  002-insert-initial-products.xml
+  ================================
+  Changeset 2: Inserts seed data into the 'products' table.
+
+  Key Liquibase concept demonstrated here:
+  - <insert> is the XML-based DML insert. It is database-agnostic and works
+    with any JDBC-supported database.
+  - Note: at this stage the 'category' column doesn't exist yet — it will be
+    added by changeset 003. We insert without it and later UPDATE in 003.
+  - runOnChange="false" (default) means this runs exactly once.
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="002" author="example">
+
+        <!-- Insert first seed product -->
+        <insert tableName="products">
+            <column name="name" value="Wireless Headphones"/>
+            <column name="price" valueNumeric="79.99"/>
+        </insert>
+
+        <!-- Insert second seed product -->
+        <insert tableName="products">
+            <column name="name" value="Mechanical Keyboard"/>
+            <column name="price" valueNumeric="149.99"/>
+        </insert>
+
+        <!-- Insert third seed product -->
+        <insert tableName="products">
+            <column name="name" value="USB-C Hub"/>
+            <column name="price" valueNumeric="39.99"/>
+        </insert>
+
+        <!--
+          rollback: remove the inserted rows using a WHERE condition.
+          Because IDs are auto-generated, we delete by name to be deterministic.
+        -->
+        <rollback>
+            <delete tableName="products">
+                <where>name IN ('Wireless Headphones', 'Mechanical Keyboard', 'USB-C Hub')</where>
+            </delete>
+        </rollback>
+
+    </changeSet>
+
+</databaseChangeLog>

@@ -1,0 +1,41 @@
+services:
+
+  # -------------------------------------------------------------------
+  # Spring Boot application service
+  # -------------------------------------------------------------------
+  app:
+    build: .
+    ports:
+      # Map host port 8080 to the container port 8080 where Spring Boot listens.
+      - "8080:8080"
+    environment:
+      # Override datasource properties so the app connects to the 'db' service
+      # defined below, using the Docker Compose service name as the hostname.
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/liquibasedb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+    depends_on:
+      db:
+        # Wait until PostgreSQL reports itself as healthy before starting the app.
+        # Without this, the app may try to connect before PostgreSQL is ready.
+        condition: service_healthy
+
+  # -------------------------------------------------------------------
+  # PostgreSQL database service
+  # -------------------------------------------------------------------
+  db:
+    image: postgres:15
+    ports:
+      # Expose PostgreSQL on host port 5432 (useful for manual inspection
+      # via pgAdmin, DBeaver, or psql from the host machine).
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=liquibasedb
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    healthcheck:
+      # pg_isready checks if the PostgreSQL server is ready to accept connections.
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
