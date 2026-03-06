@@ -39,7 +39,7 @@ class SessionControllerUnitTest {
 
         // Then
         verify(session).setAttribute("user", userName);
-        assertEquals(200, response.getStatusCodeValue());
+        assertEquals(200, response.getStatusCode().value());
         assertEquals("User name 'John Doe' stored in session.", response.getBody());
     }
 
@@ -58,7 +58,7 @@ class SessionControllerUnitTest {
 
         // Then
         verify(session).getAttribute("user");
-        assertEquals(200, response.getStatusCodeValue());
+        assertEquals(200, response.getStatusCode().value());
         assertEquals("Hello, Jane Doe!", response.getBody());
     }
 
@@ -76,7 +76,7 @@ class SessionControllerUnitTest {
 
         // Then
         verify(session).getAttribute("user");
-        assertEquals(404, response.getStatusCodeValue());
+        assertEquals(404, response.getStatusCode().value());
         assertNull(response.getBody());
     }
 }
