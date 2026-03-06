@@ -1,0 +1,159 @@
+{{! in-stock.mustache: Lists only the products currently available in stock }}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>In Stock | Mustache Templates</title>
+    <!--
+        Model attributes from ProductController.inStock():
+          products -- List of Product objects where inStock() == true
+          count    -- int: list size pre-computed in Java (model.addAttribute "count")
+
+        Mustache has no built-in sequence-size helper, so the controller
+        computes the count and exposes it as a named model attribute.
+
+        Inside the #products section, each tag resolves against the Product record:
+          "category"       -> product.category()
+          "name"           -> product.name()
+          "formattedPrice" -> product.formattedPrice()  e.g. "$79.99"
+          "id"             -> product.id()
+    -->
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            color: #333;
+            min-height: 100vh;
+        }
+
+        nav {
+            background: #1a1a2e;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        nav .brand { color: #e94560; font-size: 1.4rem; font-weight: 700; text-decoration: none; }
+        nav a { color: #ccc; text-decoration: none; margin-left: 1.5rem; transition: color 0.2s; }
+        nav a:hover { color: #fff; }
+
+        .container { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        h1 { font-size: 1.8rem; color: #1a1a2e; }
+
+        .count-badge {
+            background: #e94560;
+            color: #fff;
+            font-size: 0.85rem;
+            font-weight: 700;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 1.25rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+        }
+
+        .card-category {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #e94560;
+            margin-bottom: 0.4rem;
+        }
+
+        .card-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; color: #1a1a2e; }
+
+        .card-price {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #333;
+            margin-top: auto;
+            padding-top: 0.75rem;
+        }
+
+        .badge-in-stock {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            margin-top: 0.5rem;
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .card-link {
+            display: inline-block;
+            margin-top: 1rem;
+            color: #e94560;
+            font-weight: 600;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+
+        .card-link:hover { color: #c73652; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="brand" href="/">&#127991; Product Catalog</a>
+    <div>
+        <a href="/">Home</a>
+        <a href="/products/in-stock">In Stock</a>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="page-header">
+        <h1>Available Products</h1>
+        <!-- "count" is the pre-computed list size set by the controller -->
+        <span class="count-badge" id="item-count">{{count}} items</span>
+    </div>
+
+    <div class="grid">
+        <!-- Mustache section: iterates over the "products" list attribute -->
+        {{#products}}
+        <div class="card">
+            <div class="card-category">{{category}}</div>
+            <div class="card-title">{{name}}</div>
+            <div class="card-price">{{formattedPrice}}</div>
+            <span class="badge-in-stock">&#10004; In Stock</span>
+            <a class="card-link" href="/products/{{id}}">View Details &#8594;</a>
+        </div>
+        {{/products}}
+    </div>
+</div>
+</body>
+</html>

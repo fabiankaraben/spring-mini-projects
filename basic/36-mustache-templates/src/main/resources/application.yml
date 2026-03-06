@@ -1,0 +1,35 @@
+# Application configuration for the Mustache Templates mini-project
+
+spring:
+  application:
+    name: mustache-templates
+
+  # Mustache configuration
+  # Spring Boot auto-configures Mustache via MustacheAutoConfiguration.
+  # The settings below are the defaults; they are declared explicitly here
+  # to make the configuration self-documenting.
+  mustache:
+    # Templates are located under src/main/resources/templates/ by default.
+    # Spring Boot's MustacheViewResolver prepends "classpath:/templates/" and
+    # appends ".mustache" to the logical view name returned by the controller.
+    prefix: classpath:/templates/
+
+    # File extension for Mustache templates.
+    suffix: .mustache
+
+    # Encoding used when reading template files from disk
+    charset: UTF-8
+
+    # Disable the template cache in development so that changes to .mustache
+    # files are reflected immediately without restarting the server.
+    # In production this should be set to true for performance.
+    cache: false
+
+# Server configuration
+server:
+  port: 8080
+
+# Logging: show INFO-level logs from our package
+logging:
+  level:
+    com.example.mustache: INFO

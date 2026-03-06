@@ -1,0 +1,274 @@
+{{! index.mustache: Main product catalog page }}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Catalog | Mustache Templates</title>
+    <!--
+        Mustache Syntax Key:
+          variable tags   -- double-brace syntax outputs an HTML-escaped value
+          section tags    -- hash/slash pair iterates a list or renders a truthy block
+          inverted tags   -- caret/slash pair renders when the value is falsy or empty
+          comment tags    -- bang inside braces is ignored in the output
+
+        Important: JMustache parses the entire file for its delimiter tokens,
+        including inside HTML comments. Never write actual Mustache delimiters
+        inside comments -- use plain English descriptions instead.
+    -->
+    <!-- Inline CSS: keeps the project self-contained with no external assets -->
+    <style>
+        /* ---- Reset and base ---- */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            color: #333;
+            min-height: 100vh;
+        }
+
+        /* ---- Navigation ---- */
+        nav {
+            background: #1a1a2e;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        nav .brand {
+            color: #e94560;
+            font-size: 1.4rem;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        nav a {
+            color: #ccc;
+            text-decoration: none;
+            margin-left: 1.5rem;
+            transition: color 0.2s;
+        }
+
+        nav a:hover { color: #fff; }
+
+        /* ---- Page container ---- */
+        .container {
+            max-width: 1100px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        h1 { margin-bottom: 1.5rem; font-size: 1.8rem; color: #1a1a2e; }
+
+        /* ---- Category filter bar ---- */
+        .filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .filter-pill {
+            padding: 0.4rem 1rem;
+            border-radius: 20px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            border: 2px solid #1a1a2e;
+            color: #1a1a2e;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .filter-pill:hover,
+        .filter-pill.active {
+            background: #1a1a2e;
+            color: #fff;
+        }
+
+        /* ---- Filter notice ---- */
+        .filter-notice {
+            margin-bottom: 1rem;
+            font-size: 0.95rem;
+            color: #555;
+        }
+
+        .filter-notice a {
+            color: #e94560;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        /* ---- Product grid ---- */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 1.25rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+        }
+
+        .card-category {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #e94560;
+            margin-bottom: 0.4rem;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: #1a1a2e;
+        }
+
+        .card-price {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #333;
+            margin-top: auto;
+            padding-top: 0.75rem;
+        }
+
+        /* ---- Stock badge ---- */
+        .badge {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            margin-top: 0.5rem;
+        }
+
+        .badge-in-stock  { background: #d4edda; color: #155724; }
+        .badge-out-stock { background: #f8d7da; color: #721c24; }
+
+        /* ---- Detail link ---- */
+        .card-link {
+            display: inline-block;
+            margin-top: 1rem;
+            color: #e94560;
+            font-weight: 600;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+
+        .card-link:hover { color: #c73652; }
+
+        /* ---- Empty state ---- */
+        .empty {
+            text-align: center;
+            padding: 3rem;
+            color: #888;
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="brand" href="/">&#127991; Product Catalog</a>
+    <div>
+        <a href="/">Home</a>
+        <a href="/products/in-stock">In Stock</a>
+    </div>
+</nav>
+
+<div class="container">
+    <h1>Product Catalog</h1>
+
+    <!--
+        Category filter bar.
+        "categories" is a List of CategoryItem(name, active) objects from the controller.
+        "categoryFiltered" is a pre-computed boolean (true when ?category param is set).
+
+        The inverted section on categoryFiltered appends " active" to the "All" pill
+        when no filter is currently selected (i.e., categoryFiltered is false).
+
+        Each CategoryItem's "active" boolean is used the same way to highlight which
+        category pill is currently selected.
+    -->
+    <div class="filter-bar">
+        <a href="/"
+           class="filter-pill{{^categoryFiltered}} active{{/categoryFiltered}}">All</a>
+        {{#categories}}
+        <a href="/?category={{name}}"
+           class="filter-pill{{#active}} active{{/active}}">{{name}}</a>
+        {{/categories}}
+    </div>
+
+    <!--
+        Filter notice bar, visible only when a category filter is active.
+        "categoryFiltered" is a pre-computed boolean model attribute.
+        A Mustache section on a true boolean renders its body exactly once.
+        "selectedCategory" outputs the name of the active filter.
+    -->
+    {{#categoryFiltered}}
+    <p class="filter-notice">
+        Showing results for <strong>{{selectedCategory}}</strong>.
+        <a href="/">Clear filter</a>
+    </p>
+    {{/categoryFiltered}}
+
+    <!--
+        Product grid section.
+        "hasProducts" is a pre-computed boolean (set to !products.isEmpty() in the controller).
+        Using a separate boolean flag avoids trying to open and close the grid div
+        inside different section tags, which is not possible in Mustache.
+
+        Inside the products section each identifier resolves against the Product record:
+          category       calls product.category()
+          name           calls product.name()
+          formattedPrice calls product.formattedPrice() -- returns a pre-formatted string
+          id             calls product.id()
+          The inStock truthy section renders when product.inStock() is true.
+          The inStock inverted section renders when product.inStock() is false.
+    -->
+    {{#hasProducts}}
+    <div class="grid">
+        {{#products}}
+        <div class="card">
+            <div class="card-category">{{category}}</div>
+            <div class="card-title">{{name}}</div>
+            <div class="card-price">{{formattedPrice}}</div>
+            {{#inStock}}
+            <span class="badge badge-in-stock">In Stock</span>
+            {{/inStock}}
+            {{^inStock}}
+            <span class="badge badge-out-stock">Out of Stock</span>
+            {{/inStock}}
+            <a class="card-link" href="/products/{{id}}">View Details &#8594;</a>
+        </div>
+        {{/products}}
+    </div>
+    {{/hasProducts}}
+
+    <!--
+        Empty state, shown when hasProducts is false.
+        The inverted section on hasProducts renders only when the list is empty.
+    -->
+    {{^hasProducts}}
+    <div class="empty">
+        <p>No products found for this filter. <a href="/">View all</a></p>
+    </div>
+    {{/hasProducts}}
+
+</div>
+</body>
+</html>

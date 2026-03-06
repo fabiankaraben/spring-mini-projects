@@ -1,0 +1,136 @@
+{{! product-detail.mustache: Detail page for a single product }}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Detail | Mustache Templates</title>
+    <!--
+        Model attribute "product" is a Product record.
+        Mustache "object section" pattern: the #product...#/product block enters
+        the scope of the Product object, so inside we write just "name",
+        "category", "formattedPrice", "id", "inStock" without a "product." prefix.
+
+        Boolean sections on the inStock record component:
+          #inStock...#/inStock  -> renders when inStock() == true
+          ^inStock...^/inStock  -> renders when inStock() == false (inverted section)
+    -->
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            color: #333;
+            min-height: 100vh;
+        }
+
+        nav {
+            background: #1a1a2e;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        nav .brand { color: #e94560; font-size: 1.4rem; font-weight: 700; text-decoration: none; }
+        nav a { color: #ccc; text-decoration: none; margin-left: 1.5rem; transition: color 0.2s; }
+        nav a:hover { color: #fff; }
+
+        .container { max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 1.5rem;
+            color: #e94560;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: #c73652; }
+
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.09);
+        }
+
+        .card-category {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #e94560;
+            margin-bottom: 0.5rem;
+        }
+
+        h1 { font-size: 2rem; color: #1a1a2e; margin-bottom: 1rem; }
+
+        .price {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1a1a2e;
+            margin-bottom: 1.5rem;
+        }
+
+        .badge {
+            display: inline-block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 0.3rem 0.9rem;
+            border-radius: 20px;
+            margin-bottom: 1.5rem;
+        }
+
+        .badge-in-stock  { background: #d4edda; color: #155724; }
+        .badge-out-stock { background: #f8d7da; color: #721c24; }
+
+        .meta-row {
+            font-size: 0.9rem;
+            color: #555;
+            border-top: 1px solid #eee;
+            padding-top: 1rem;
+        }
+
+        .meta-row span { font-weight: 600; color: #333; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="brand" href="/">&#127991; Product Catalog</a>
+    <div>
+        <a href="/">Home</a>
+        <a href="/products/in-stock">In Stock</a>
+    </div>
+</nav>
+
+<div class="container">
+    <a class="back-link" href="/">&#8592; Back to Catalog</a>
+
+    <!--
+        Object section: entering the scope of the "product" model attribute.
+        All inner tags resolve against the Product record without needing a prefix.
+        "formattedPrice" calls Product.formattedPrice() which pre-formats "$79.99".
+        Mustache has no number formatter built-in, so Java-side pre-computation is
+        the canonical approach.
+    -->
+    {{#product}}
+    <div class="card">
+        <div class="card-category">{{category}}</div>
+        <h1>{{name}}</h1>
+        <div class="price">{{formattedPrice}}</div>
+        {{#inStock}}
+        <span class="badge badge-in-stock">&#10004; In Stock</span>
+        {{/inStock}}
+        {{^inStock}}
+        <span class="badge badge-out-stock">&#10008; Out of Stock</span>
+        {{/inStock}}
+        <div class="meta-row">Product ID: <span>#{{id}}</span></div>
+    </div>
+    {{/product}}
+
+</div>
+</body>
+</html>
