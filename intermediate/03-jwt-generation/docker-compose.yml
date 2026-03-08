@@ -1,0 +1,48 @@
+services:
+  # ── PostgreSQL database ──────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: jwtgeneration-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: jwtdb
+    ports:
+      # Expose port 5432 so you can also connect with a local DB client (e.g. DBeaver)
+      - "5432:5432"
+    volumes:
+      # Named volume ensures data is preserved across container restarts
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready exits 0 only when PostgreSQL is ready to accept connections
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Spring Boot application ──────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: jwtgeneration-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        # Wait until the healthcheck above passes before starting the app;
+        # this avoids "Connection refused" errors on startup.
+        condition: service_healthy
+    environment:
+      # Override the datasource URL so that "db" resolves to the postgres service
+      # inside the Docker Compose network instead of looking for a local host.
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/jwtdb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+      # JWT secret for the containerised deployment.
+      # IMPORTANT: Replace this with a strong random secret in any non-dev environment.
+      # Generate one with: openssl rand -base64 48
+      - APP_JWT_SECRET=ThisIsAVeryLongSecretKeyForJWTGenerationMiniProjectDev!2024
+      - APP_JWT_EXPIRATION_SECONDS=3600
+
+volumes:
+  # Declare the named volume used by the db service
+  postgres_data:

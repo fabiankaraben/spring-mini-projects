@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: jwt-generation
+
+  # ── DataSource ────────────────────────────────────────────────────────────
+  datasource:
+    # Default URL targets a local PostgreSQL instance.
+    # When running via Docker Compose, this is overridden by the
+    # SPRING_DATASOURCE_URL environment variable defined in docker-compose.yml
+    # so that "db" resolves to the PostgreSQL container on the internal network.
+    url: jdbc:postgresql://localhost:5432/jwtdb
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  # ── JPA / Hibernate ───────────────────────────────────────────────────────
+  jpa:
+    # create-drop: drop and recreate the schema on every startup/shutdown.
+    # Suitable for development; use "validate" or "none" in production.
+    hibernate:
+      ddl-auto: create-drop
+    # Log generated SQL to stdout for educational visibility
+    show-sql: true
+    properties:
+      hibernate:
+        # Pretty-print the SQL statements so they are easier to read in logs
+        format_sql: true
+        # Target PostgreSQL dialect – lets Hibernate use Postgres-specific SQL features
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+# ── Server ──────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Application-specific JWT settings ───────────────────────────────────────
+app:
+  jwt:
+    # Secret key used to sign JWTs with HMAC-SHA256 (HS256).
+    # IMPORTANT: This value is for development only.
+    # In production, provide a cryptographically random secret of at least
+    # 32 bytes (256 bits) via an environment variable or secrets manager.
+    # Example: APP_JWT_SECRET=$(openssl rand -base64 48)
+    secret: "ThisIsAVeryLongSecretKeyForJWTGenerationMiniProjectDev!2024"
+    # Token validity in seconds (3600 = 1 hour)
+    expiration-seconds: 3600
