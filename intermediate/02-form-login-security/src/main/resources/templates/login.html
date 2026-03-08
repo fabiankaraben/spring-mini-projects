@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!--
+  login.html – Custom login form template.
+
+  Thymeleaf key points:
+  - th:action="@{/login}" generates the correct URL and automatically injects
+    the hidden _csrf input field, which Spring Security requires for POST forms.
+  - th:if="${param.error}" shows an error message when Spring Security redirects
+    back here with ?error after a failed authentication attempt.
+  - th:if="${param.logout}" shows a success message after the user logs out.
+-->
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Login – Form Login Security</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .card {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,.1);
+            padding: 40px 36px;
+            width: 100%;
+            max-width: 380px;
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 8px; color: #1a1a2e; }
+        p.subtitle { font-size: 0.875rem; color: #666; margin-bottom: 24px; }
+        label { display: block; font-size: 0.85rem; font-weight: 600; color: #333; margin-bottom: 4px; }
+        input[type=text], input[type=password] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            margin-bottom: 16px;
+            outline: none;
+            transition: border-color .2s;
+        }
+        input:focus { border-color: #6366f1; }
+        button[type=submit] {
+            width: 100%;
+            padding: 11px;
+            background: #6366f1;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .2s;
+        }
+        button[type=submit]:hover { background: #4f46e5; }
+        .alert {
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            margin-bottom: 16px;
+        }
+        .alert-error { background: #fee2e2; color: #b91c1c; }
+        .alert-success { background: #d1fae5; color: #065f46; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>Sign in</h1>
+    <p class="subtitle">Form Login Security Demo</p>
+
+    <!--
+      Show an error alert when Spring Security redirects back here with ?error.
+      This happens when username / password are wrong or the account is disabled.
+    -->
+    <div th:if="${param.error}" class="alert alert-error">
+        Invalid username or password. Please try again.
+    </div>
+
+    <!--
+      Show a success alert when the user explicitly logs out.
+      Spring Security appends ?logout to the login URL after a successful logout.
+    -->
+    <div th:if="${param.logout}" class="alert alert-success">
+        You have been logged out successfully.
+    </div>
+
+    <!--
+      The form action uses Thymeleaf's URL expression syntax (@{...}) so that:
+        1. The context path is prepended automatically.
+        2. Thymeleaf adds the hidden _csrf field required by Spring Security's
+           CSRF protection (enabled by default for form-based apps).
+    -->
+    <form th:action="@{/login}" method="post">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" placeholder="Enter username" required autofocus/>
+
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" placeholder="Enter password" required/>
+
+        <!--
+          Spring Security reads credentials from the fields named "username" and
+          "password" by default. These names match the defaults in the form-login
+          configuration, so no extra mapping is needed.
+        -->
+        <button type="submit">Sign in</button>
+    </form>
+</div>
+</body>
+</html>

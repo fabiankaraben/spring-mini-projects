@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<!--
+  dashboard.html – Main landing page for all authenticated users.
+
+  Thymeleaf + Spring Security notes:
+  - th:text="${username}" renders the username passed from the controller.
+  - th:each iterates over the 'roles' list passed from the controller.
+  - sec:authorize="hasRole('ADMIN')" (from thymeleaf-extras-springsecurity6)
+    conditionally shows the admin link only to users with ROLE_ADMIN.
+  - The logout form POSTs to /logout with the CSRF token included automatically
+    by Thymeleaf's th:action="@{/logout}".
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security"
+      lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Dashboard – Form Login Security</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; background: #f0f2f5; }
+        nav {
+            background: #1a1a2e;
+            color: #fff;
+            padding: 14px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        nav .brand { font-weight: 700; font-size: 1.1rem; }
+        nav .links a { color: #a5b4fc; text-decoration: none; margin-left: 20px; font-size: 0.9rem; }
+        nav .links a:hover { color: #fff; }
+        .container { max-width: 800px; margin: 48px auto; padding: 0 16px; }
+        .card {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,.08);
+            padding: 32px;
+            margin-bottom: 24px;
+        }
+        h1 { font-size: 1.6rem; color: #1a1a2e; margin-bottom: 8px; }
+        p { color: #555; line-height: 1.6; }
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            background: #e0e7ff;
+            color: #3730a3;
+            margin: 4px 4px 0 0;
+        }
+        .badge.admin { background: #fef3c7; color: #92400e; }
+        .btn-logout {
+            background: #ef4444;
+            color: #fff;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .btn-logout:hover { background: #dc2626; }
+        .btn-link {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 8px 18px;
+            background: #6366f1;
+            color: #fff;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+        .btn-link:hover { background: #4f46e5; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <span class="brand">Form Login Security</span>
+    <div class="links">
+        <!-- Profile link is available to every authenticated user -->
+        <a th:href="@{/profile}">My Profile</a>
+        <!--
+          sec:authorize="hasRole('ADMIN')" hides this link from non-admin users.
+          This is purely a UI convenience; the /admin endpoint itself is also
+          protected server-side via SecurityConfig.
+        -->
+        <a sec:authorize="hasRole('ADMIN')" th:href="@{/admin}">Admin Panel</a>
+        <!--
+          Logout uses a form POST (not a GET link) to satisfy Spring Security's
+          CSRF requirement. th:action="@{/logout}" injects the CSRF token.
+        -->
+        <form th:action="@{/logout}" method="post" style="display:inline;">
+            <button type="submit" class="btn-logout">Logout</button>
+        </form>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="card">
+        <h1>Welcome, <span th:text="${username}">username</span>!</h1>
+        <p>You have successfully authenticated using the form login flow. Your session is now active.</p>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom:12px; color:#1a1a2e;">Your Granted Roles</h2>
+        <p>
+            <!--
+              Iterate over the roles list provided by the controller.
+              Each role is displayed as a colored badge.
+            -->
+            <span th:each="role : ${roles}"
+                  th:text="${role}"
+                  th:classappend="${role == 'ROLE_ADMIN'} ? 'admin'"
+                  class="badge">ROLE</span>
+        </p>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom:12px; color:#1a1a2e;">Quick Links</h2>
+        <a th:href="@{/profile}" class="btn-link">View Profile</a>
+        <!-- Only render the admin link for ADMIN users -->
+        <a sec:authorize="hasRole('ADMIN')" th:href="@{/admin}" class="btn-link"
+           style="margin-left:8px; background:#f59e0b;">Admin Panel</a>
+    </div>
+</div>
+</body>
+</html>

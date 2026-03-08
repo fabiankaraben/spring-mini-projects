@@ -49,7 +49,6 @@ public class UserControllerTest {
      * mocked data fields.
      */
     @Test
-    @SuppressWarnings("null")
     public void testGetCurrentUser() throws Exception {
         // Arrange: Define behavior of the mock
         User mockUser = new User(99L, "Test Driven User", "test@test.com", "USER");

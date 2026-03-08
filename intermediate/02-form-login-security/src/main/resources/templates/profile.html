@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<!--
+  profile.html – User profile page, accessible by any authenticated user.
+
+  Displays the current user's username and their assigned roles.
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security"
+      lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>My Profile – Form Login Security</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; background: #f0f2f5; }
+        nav {
+            background: #1a1a2e;
+            color: #fff;
+            padding: 14px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        nav .brand { font-weight: 700; font-size: 1.1rem; }
+        nav .links a { color: #a5b4fc; text-decoration: none; margin-left: 20px; font-size: 0.9rem; }
+        nav .links a:hover { color: #fff; }
+        .container { max-width: 800px; margin: 48px auto; padding: 0 16px; }
+        .card {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,.08);
+            padding: 32px;
+            margin-bottom: 24px;
+        }
+        h1 { font-size: 1.6rem; color: #1a1a2e; margin-bottom: 8px; }
+        p { color: #555; line-height: 1.6; }
+        .field-label { font-size: 0.8rem; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+        .field-value { font-size: 1rem; color: #111; margin-bottom: 20px; }
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            background: #e0e7ff;
+            color: #3730a3;
+            margin: 4px 4px 0 0;
+        }
+        .badge.admin { background: #fef3c7; color: #92400e; }
+        .btn-logout {
+            background: #ef4444;
+            color: #fff;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .btn-back {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 8px 18px;
+            background: #6366f1;
+            color: #fff;
+            border-radius: 6px;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <span class="brand">Form Login Security</span>
+    <div class="links">
+        <a th:href="@{/dashboard}">Dashboard</a>
+        <a sec:authorize="hasRole('ADMIN')" th:href="@{/admin}">Admin Panel</a>
+        <!-- POST logout to satisfy CSRF requirements -->
+        <form th:action="@{/logout}" method="post" style="display:inline;">
+            <button type="submit" class="btn-logout">Logout</button>
+        </form>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="card">
+        <h1>My Profile</h1>
+
+        <div class="field-label">Username</div>
+        <div class="field-value" th:text="${username}">username</div>
+
+        <div class="field-label">Assigned Roles</div>
+        <div class="field-value">
+            <!--
+              Iterate over the roles list. 'ROLE_ADMIN' gets a different colour
+              badge to make it visually distinct from regular user roles.
+            -->
+            <span th:each="role : ${roles}"
+                  th:text="${role}"
+                  th:classappend="${role == 'ROLE_ADMIN'} ? 'admin'"
+                  class="badge">ROLE</span>
+        </div>
+
+        <div class="field-label">Session Status</div>
+        <div class="field-value">
+            Active – authenticated via Spring Security form login.
+        </div>
+    </div>
+
+    <a th:href="@{/dashboard}" class="btn-back">← Back to Dashboard</a>
+</div>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!--
+  admin.html – Admin-only panel page.
+
+  Access to this page is restricted server-side by Spring Security's rule:
+    .requestMatchers("/admin/**").hasRole("ADMIN")
+
+  Any non-admin user who tries to access /admin directly will receive HTTP 403
+  before this template is ever rendered.
+-->
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security"
+      lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Admin Panel – Form Login Security</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; background: #f0f2f5; }
+        nav {
+            background: #1a1a2e;
+            color: #fff;
+            padding: 14px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        nav .brand { font-weight: 700; font-size: 1.1rem; }
+        nav .links a { color: #a5b4fc; text-decoration: none; margin-left: 20px; font-size: 0.9rem; }
+        nav .links a:hover { color: #fff; }
+        .container { max-width: 800px; margin: 48px auto; padding: 0 16px; }
+        .card {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,.08);
+            padding: 32px;
+            margin-bottom: 24px;
+        }
+        h1 { font-size: 1.6rem; color: #92400e; margin-bottom: 8px; }
+        p { color: #555; line-height: 1.6; }
+        .admin-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #fef3c7;
+            color: #92400e;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            margin-left: 8px;
+        }
+        .btn-logout {
+            background: #ef4444;
+            color: #fff;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .btn-back {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 8px 18px;
+            background: #6366f1;
+            color: #fff;
+            border-radius: 6px;
+            text-decoration: none;
+        }
+        .info-box {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 12px 16px;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            color: #78350f;
+            margin-top: 16px;
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <span class="brand">Form Login Security <span class="admin-badge">ADMIN</span></span>
+    <div class="links">
+        <a th:href="@{/dashboard}">Dashboard</a>
+        <a th:href="@{/profile}">My Profile</a>
+        <!-- Logout via POST to include the CSRF token automatically -->
+        <form th:action="@{/logout}" method="post" style="display:inline;">
+            <button type="submit" class="btn-logout">Logout</button>
+        </form>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="card">
+        <h1>Admin Panel</h1>
+        <p>Welcome, <strong th:text="${username}">admin</strong>!</p>
+        <p style="margin-top: 8px;">
+            You are viewing this page because your account has the
+            <strong>ROLE_ADMIN</strong> authority. This page is protected
+            server-side by Spring Security; regular users cannot access it.
+        </p>
+        <div class="info-box">
+            <strong>Security Note:</strong> The restriction is enforced by
+            <code>.requestMatchers("/admin/**").hasRole("ADMIN")</code>
+            in <code>SecurityConfig</code>. Any user without ROLE_ADMIN
+            receives HTTP 403 Forbidden before reaching this controller.
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom:12px; color:#1a1a2e;">Admin Actions</h2>
+        <p>This is a demo admin panel. In a real application, admin-specific
+           operations (user management, reports, etc.) would appear here.</p>
+        <a th:href="@{/dashboard}" class="btn-back">← Back to Dashboard</a>
+    </div>
+</div>
+</body>
+</html>
