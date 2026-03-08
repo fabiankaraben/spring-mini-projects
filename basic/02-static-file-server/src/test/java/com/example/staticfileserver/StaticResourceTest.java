@@ -27,7 +27,6 @@ class StaticResourceTest {
     private MockMvc mockMvc;
 
     @Test
-    @SuppressWarnings("null")
     void shouldServeIndexHtml() throws Exception {
         // Assert that GET /index.html returns 200 OK and valid HTML content
         mockMvc.perform(get("/index.html"))
@@ -37,7 +36,6 @@ class StaticResourceTest {
     }
 
     @Test
-    @SuppressWarnings("null")
     void shouldServeStyleCss() throws Exception {
         // Assert that GET /style.css returns 200 OK and valid CSS content type
         mockMvc.perform(get("/style.css"))
@@ -48,7 +46,6 @@ class StaticResourceTest {
     }
 
     @Test
-    @SuppressWarnings("null")
     void shouldServeScriptJs() throws Exception {
         // Assert that GET /script.js returns 200 OK
         mockMvc.perform(get("/script.js"))
