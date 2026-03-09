@@ -1,0 +1,8 @@
+spring:
+  application:
+    name: websockets-chat
+
+# ── Server ────────────────────────────────────────────────────────────────────
+server:
+  # Default HTTP port – WebSocket upgrades also happen on this port
+  port: 8080
