@@ -1,0 +1,74 @@
+spring:
+  application:
+    # Application name shown in logs and Spring Boot Actuator
+    name: kafka-consumer
+
+  kafka:
+    # ── Kafka broker connection ──────────────────────────────────────────────
+    # Default bootstrap address for local development. When running via Docker
+    # Compose this value is overridden by the SPRING_KAFKA_BOOTSTRAP_SERVERS
+    # environment variable so the app reaches the 'kafka' service on the
+    # Docker Compose internal network.
+    bootstrap-servers: localhost:9092
+
+    consumer:
+      # Unique identifier for this consumer group. All application instances
+      # sharing the same group-id compete for partitions: Kafka assigns each
+      # partition to exactly one consumer in the group, enabling horizontal scaling.
+      group-id: kafka-consumer-group
+
+      # "earliest" – start reading from the beginning of the topic if no committed
+      # offset exists for this group. Useful for development so you always see
+      # all messages produced before this consumer started.
+      auto-offset-reset: earliest
+
+      # Disable auto-commit because we use MANUAL_IMMEDIATE acknowledgement mode
+      # in the listener container. Auto-commit would race with our explicit ack calls.
+      enable-auto-commit: false
+
+      # Deserialiser for the Kafka message KEY (the orderId string).
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+      # Deserialiser for the Kafka message VALUE (the OrderEvent JSON payload).
+      # JsonDeserializer (from spring-kafka) uses Jackson to reconstruct the
+      # Java object from the JSON bytes in the message value.
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+
+      properties:
+        # Fully-qualified class name to deserialise the message value into.
+        # This tells JsonDeserializer the target type when type headers are absent
+        # or when USE_TYPE_INFO_HEADERS is set to false.
+        spring.json.value.default.type: com.example.kafkaconsumer.domain.OrderEvent
+
+        # Packages whose classes JsonDeserializer is allowed to instantiate.
+        # This security measure prevents deserialisation of arbitrary classes.
+        spring.json.trusted.packages: com.example.kafkaconsumer.domain
+
+        # Do not use the type information embedded in Kafka message headers.
+        # Setting this to false makes the consumer independent of the producer's
+        # class names, which is important in cross-team or cross-service scenarios.
+        spring.json.use.type.headers: false
+
+# ── Application-specific settings ─────────────────────────────────────────────
+app:
+  kafka:
+    topic:
+      # Name of the Kafka topic this consumer listens on.
+      # Must match the topic name used by the producer (14-kafka-producer).
+      orders: order-events
+
+      # Number of partitions expected on the topic. This is informational here;
+      # the actual partition count is set by whoever created the topic (the producer
+      # or a Kafka admin). More partitions allow more parallel consumer threads.
+      partitions: 3
+
+      # Replication factor for the topic. Set to 1 for single-broker development.
+      replication-factor: 1
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show DEBUG-level logs from our own code so you can trace every consumed event
+    com.example.kafkaconsumer: DEBUG
+    # Show INFO-level logs from Spring Kafka to observe consumer lifecycle events
+    org.springframework.kafka: INFO

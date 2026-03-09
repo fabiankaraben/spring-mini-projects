@@ -1,0 +1,78 @@
+services:
+  # ── Apache Kafka (KRaft mode – no ZooKeeper) ──────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafkaconsumer-kafka
+    ports:
+      # 9092 is exposed on the host so local tools (kafka-console-producer,
+      # kafka-ui, etc.) can connect without going through Docker networking.
+      - "9092:9092"
+    environment:
+      # ── KRaft identity ──────────────────────────────────────────────────
+      # Every KRaft node needs a unique numeric ID within the cluster.
+      KAFKA_NODE_ID: 1
+
+      # Combined broker+controller role: this single node handles both
+      # leader election (controller) and message storage (broker).
+      KAFKA_PROCESS_ROLES: broker,controller
+
+      # The controller quorum consists only of node 1 in this single-broker setup.
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+
+      # ── Listeners ───────────────────────────────────────────────────────
+      # PLAINTEXT        – for inter-container communication (Docker network)
+      # PLAINTEXT_HOST   – mapped to host port 9092 for external tools
+      # CONTROLLER       – used by KRaft controller communication (port 29093)
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://0.0.0.0:9092,CONTROLLER://kafka:29093
+
+      # Maps listener names to security protocols
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+
+      # The address KRaft controller peers use to reach this node
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      # The address clients (including the Spring Boot app) use to connect.
+      # PLAINTEXT_HOST:// is for external (host) access,
+      # PLAINTEXT:// is for the app container on the Docker Compose network.
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+
+      # ── Topic defaults ───────────────────────────────────────────────────
+      # Replication factor 1 is fine for single-broker development.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_NUM_PARTITIONS: 3
+
+      # ── Log retention ────────────────────────────────────────────────────
+      # Keep log segments for 1 hour in development (default is 7 days)
+      KAFKA_LOG_RETENTION_HOURS: 1
+
+      # ── KRaft cluster ID ────────────────────────────────────────────────
+      # A stable UUID that identifies this Kafka cluster. Generate your own
+      # with: docker run --rm confluentinc/cp-kafka:7.6.1 kafka-storage random-uuid
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    healthcheck:
+      # kafka-broker-api-versions is a lightweight admin call that succeeds
+      # only when the broker is fully started and accepting connections.
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ── Spring Boot application ──────────────────────────────────────────────
+  app:
+    build: .
+    container_name: kafkaconsumer-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      kafka:
+        # Wait until the healthcheck above passes (broker is ready) before
+        # starting the Spring Boot app to avoid "Connection refused" errors.
+        condition: service_healthy
+    environment:
+      # Override the bootstrap-servers so the app reaches the 'kafka' service
+      # on the Docker Compose internal network instead of localhost:9092.
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
