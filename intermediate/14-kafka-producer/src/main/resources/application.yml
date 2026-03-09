@@ -1,0 +1,75 @@
+spring:
+  application:
+    # Application name shown in logs and Spring Boot Actuator
+    name: kafka-producer
+
+  kafka:
+    # ── Kafka broker connection ──────────────────────────────────────────────
+    # Default bootstrap address for local development. When running via Docker
+    # Compose this value is overridden by the SPRING_KAFKA_BOOTSTRAP_SERVERS
+    # environment variable so the app reaches the 'kafka' service on the
+    # Docker Compose internal network.
+    bootstrap-servers: localhost:9092
+
+    producer:
+      # Unique identifier for this producer in the Kafka cluster.
+      # Useful for monitoring and debugging in Kafka tooling (e.g. kafka-ui).
+      client-id: kafka-producer-app
+
+      # How many broker acknowledgements the producer requires before
+      # considering a send successful.
+      #   all (or -1) → leader + all in-sync replicas must acknowledge
+      #   1            → only the leader must acknowledge (default)
+      #   0            → fire-and-forget, no acknowledgement
+      # "all" provides the strongest durability guarantee.
+      acks: all
+
+      # Number of times the producer retries a failed send before giving up.
+      # Combined with acks=all this guards against transient broker failures.
+      retries: 3
+
+      # How long (ms) to wait before retrying a failed send.
+      retry-backoff-ms: 1000
+
+      # Serialiser for the Kafka message KEY (the orderId string).
+      # StringSerializer converts a Java String to a UTF-8 byte array.
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+      # Serialiser for the Kafka message VALUE (the OrderEvent object).
+      # JsonSerializer (from spring-kafka) uses Jackson to serialise the
+      # object to a JSON byte array. The type information is embedded in
+      # a special header so the deserialiser on the consumer side can
+      # reconstruct the correct Java type.
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+      properties:
+        # Embed the fully-qualified class name of the value in a Kafka header.
+        # This header is used by JsonDeserializer on the consumer side to know
+        # which Java class to deserialise the JSON back into.
+        spring.json.add.type.headers: true
+
+# ── Application-specific settings ─────────────────────────────────────────────
+app:
+  kafka:
+    topic:
+      # Name of the Kafka topic where order events are published.
+      # This value is read by KafkaTopicConfig (to create the topic if absent)
+      # and by OrderEventService (to know where to send messages).
+      orders: order-events
+
+      # Number of partitions for the topic. More partitions allow more
+      # parallelism on the consumer side, at the cost of more broker resources.
+      partitions: 3
+
+      # Replication factor: how many broker copies of each partition exist.
+      # Must not exceed the number of brokers in the cluster.
+      # Set to 1 for single-broker local development.
+      replication-factor: 1
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show DEBUG-level logs from our own code so you can see every Kafka send
+    com.example.kafkaproducer: DEBUG
+    # Show INFO-level logs from Spring Kafka to observe producer lifecycle events
+    org.springframework.kafka: INFO

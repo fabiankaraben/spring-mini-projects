@@ -1,0 +1,34 @@
+spring:
+  kafka:
+    # ── Kafka broker connection for tests ──────────────────────────────────────
+    # This placeholder value is overridden at runtime by @DynamicPropertySource
+    # in the integration test class, which injects the actual bootstrap address
+    # of the Testcontainers-managed Kafka broker.
+    bootstrap-servers: localhost:9092
+
+    producer:
+      # Use the same serialisers as production so integration tests exercise
+      # the real serialisation path.
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: true
+
+# ── Application-specific settings for tests ───────────────────────────────────
+app:
+  kafka:
+    topic:
+      # Use the same topic name as production so the KafkaTopicConfig bean
+      # creates the topic correctly inside the Testcontainers broker.
+      orders: order-events
+      partitions: 1
+      # Single replica is sufficient for a single-broker test container.
+      replication-factor: 1
+
+# ── Logging (quieter in tests) ────────────────────────────────────────────────
+logging:
+  level:
+    com.example.kafkaproducer: DEBUG
+    org.springframework.kafka: WARN
+    org.testcontainers: WARN
+    com.github.dockerjava: WARN
