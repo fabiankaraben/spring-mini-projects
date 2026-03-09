@@ -1,0 +1,45 @@
+spring:
+  # ── Application name ────────────────────────────────────────────────────────────
+  application:
+    name: redis-session-store
+
+  # ── Redis connection ─────────────────────────────────────────────────────────────
+  # Spring Boot auto-configures a Lettuce connection pool using these properties.
+  # When running locally (outside Docker) ensure a Redis server is running on
+  # localhost:6379, or use docker compose up to start one automatically.
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}   # Override via env var in Docker Compose
+      port: ${REDIS_PORT:6379}        # Override via env var if using a non-default port
+      # password: ${REDIS_PASSWORD:}  # Uncomment and set if your Redis requires auth
+
+  # ── Spring Session ────────────────────────────────────────────────────────────────
+  # Tells Spring Boot to use Redis as the session store instead of the default
+  # in-memory (Tomcat) session store. Spring Session's auto-configuration reads
+  # this property and registers the SessionRepositoryFilter automatically.
+  session:
+    store-type: redis
+    # The Redis namespace prefix for all session keys.
+    # Keys will be stored as: spring:session:sessions:<session-id>
+    redis:
+      namespace: spring:session
+
+# ── Server ──────────────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+  # Spring Session replaces the default Tomcat session cookie name "JSESSIONID"
+  # with "SESSION". This is transparent — the cookie name can be customised here.
+  servlet:
+    session:
+      cookie:
+        name: SESSION    # Cookie name sent to the browser / curl client
+        http-only: true  # Prevent JavaScript access to the session cookie (XSS protection)
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show Spring Session debug messages so you can observe session creation/expiry
+    org.springframework.session: DEBUG
+    # Show Lettuce (Redis client) activity at INFO level (change to DEBUG for more detail)
+    io.lettuce: INFO
+    com.example.redissessionstore: DEBUG
