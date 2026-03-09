@@ -1,0 +1,32 @@
+spring:
+  # ── DataSource ──────────────────────────────────────────────────────────────
+  # The URL, username, and password are overridden at runtime by
+  # @DynamicPropertySource in the integration test class. Testcontainers assigns
+  # a random host port to the container, so we cannot hard-code the URL here.
+  # These values act as placeholders and are never actually used in tests.
+  datasource:
+    url: jdbc:postgresql://localhost:5432/test_placeholder
+    username: test
+    password: test
+    driver-class-name: org.postgresql.Driver
+
+  # ── JPA / Hibernate ─────────────────────────────────────────────────────────
+  jpa:
+    # create-drop: create schema at context startup, drop it at shutdown.
+    # This ensures each test run starts with a clean, consistent database state.
+    hibernate:
+      ddl-auto: create-drop
+    # Suppress SQL logging in tests to keep test output clean and readable
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+# ── Application-specific settings ─────────────────────────────────────────────
+app:
+  jwt:
+    # Use a fixed, well-known secret in tests so JWTs are reproducible.
+    # Tokens generated in one test step can be verified in a later step.
+    secret: "TestSecretKeyForMethodLevelSecurityMiniProjectTesting!2024xxxx"
+    # 1-hour expiration is fine for tests (tests run in seconds)
+    expiration-seconds: 3600

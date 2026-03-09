@@ -1,0 +1,36 @@
+spring:
+  # ── DataSource ──────────────────────────────────────────────────────────────
+  # Connection details for the PostgreSQL database.
+  # When running via Docker Compose the SPRING_DATASOURCE_* env vars override
+  # these values (the "db" hostname resolves inside the Docker Compose network).
+  datasource:
+    url: jdbc:postgresql://localhost:5432/methodlevelsecuritydb
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  # ── JPA / Hibernate ─────────────────────────────────────────────────────────
+  jpa:
+    # update: Hibernate creates tables on first run and alters them on schema changes.
+    # Use "validate" or "none" in production.
+    hibernate:
+      ddl-auto: update
+    # Log generated SQL to the console for educational visibility
+    show-sql: true
+    properties:
+      hibernate:
+        # Explicitly set the dialect for PostgreSQL-specific SQL generation
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        # Pretty-print the SQL so it is easier to read in the logs
+        format_sql: true
+
+# ── Application-specific settings ─────────────────────────────────────────────
+app:
+  jwt:
+    # Secret key used to sign and verify JWT tokens with HMAC-SHA256.
+    # IMPORTANT: This is for local development ONLY.
+    # In production, override via an environment variable or secrets manager.
+    # Generate a strong secret with: openssl rand -base64 48
+    secret: "ThisIsAVeryLongSecretKeyForMethodLevelSecurityMiniProjectDev2024!"
+    # Token validity in seconds. 3600 = 1 hour.
+    expiration-seconds: 3600

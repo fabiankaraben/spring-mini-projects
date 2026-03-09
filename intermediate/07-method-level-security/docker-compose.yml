@@ -1,0 +1,48 @@
+services:
+  # ── PostgreSQL database ──────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: methodlevelsecurity-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: methodlevelsecuritydb
+    ports:
+      # Expose port 5432 so you can also connect with a local DB client (e.g. DBeaver)
+      - "5432:5432"
+    volumes:
+      # Named volume ensures data is preserved across container restarts
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready exits 0 only when PostgreSQL is accepting connections
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Spring Boot application ──────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: methodlevelsecurity-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        # Wait until the DB healthcheck passes before starting the app.
+        # Prevents "Connection refused" errors on startup.
+        condition: service_healthy
+    environment:
+      # Override the datasource URL so "db" resolves to the postgres service
+      # inside the Docker Compose network (not localhost).
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/methodlevelsecuritydb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+      # JWT secret for containerised deployment.
+      # IMPORTANT: Replace with a strong random value in any non-dev environment.
+      # Generate one with: openssl rand -base64 48
+      - APP_JWT_SECRET=ThisIsAVeryLongSecretKeyForMethodLevelSecurityMiniProjectDev2024!
+      - APP_JWT_EXPIRATION_SECONDS=3600
+
+volumes:
+  # Named volume used by the db service
+  postgres_data:

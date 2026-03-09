@@ -1,0 +1,34 @@
+FROM eclipse-temurin:21-jdk-alpine AS build
+WORKDIR /workspace/app
+
+# Copy the Maven wrapper and pom.xml first so Docker can cache the dependency
+# download layer. Dependencies are only re-downloaded when pom.xml changes,
+# not on every source code change – this keeps builds fast.
+COPY mvnw .
+COPY .mvn .mvn
+COPY pom.xml .
+
+# Download all dependencies into the Maven cache layer
+RUN chmod +x ./mvnw
+RUN ./mvnw dependency:go-offline
+
+# Copy application source and build the fat JAR.
+# Skip tests here because integration tests require Docker-in-Docker to spin
+# up Testcontainers, which is not available during a Docker image build.
+COPY src src
+RUN ./mvnw package -DskipTests
+
+# ── Runtime stage ─────────────────────────────────────────────────────────────
+# Use a JRE-only image for the final stage to keep the image size small.
+# The JDK is only needed at build time; the JRE is sufficient to run the JAR.
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+# Copy only the built JAR from the build stage (multi-stage keeps image lean)
+COPY --from=build /workspace/app/target/*.jar app.jar
+
+# Expose port 8080 (Spring Boot default)
+EXPOSE 8080
+
+# Launch the Spring Boot application
+ENTRYPOINT ["java", "-jar", "app.jar"]
