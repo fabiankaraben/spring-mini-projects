@@ -1,0 +1,47 @@
+spring:
+  # ── DataSource ──────────────────────────────────────────────────────────────
+  # The URL, username, and password are overridden at runtime by
+  # @DynamicPropertySource in the integration test class. Testcontainers assigns
+  # a random host port to the PostgreSQL container, so we cannot hard-code the
+  # URL here. These placeholder values are never actually used.
+  datasource:
+    url: jdbc:postgresql://localhost:5432/test_placeholder
+    username: test
+    password: test
+    driver-class-name: org.postgresql.Driver
+
+  # ── JPA / Hibernate ─────────────────────────────────────────────────────────
+  jpa:
+    # create-drop: create the schema at context startup and drop it at shutdown.
+    # This ensures each test run starts with a clean, consistent database state.
+    hibernate:
+      ddl-auto: create-drop
+    # Suppress SQL logging in tests to keep the test output readable
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # ── OAuth2 Client ──────────────────────────────────────────────────────────
+  # Dummy OAuth2 registration entries are needed so Spring Security does not
+  # fail at startup when no real client-id/secret are configured.
+  # The integration tests mock the OAuth2 authentication directly via
+  # SecurityMockMvcRequestPostProcessors.oauth2Login(), so these values are
+  # never actually used to make real HTTP calls to GitHub or Google.
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: test-github-client-id
+            client-secret: test-github-client-secret
+            scope:
+              - read:user
+              - user:email
+          google:
+            client-id: test-google-client-id
+            client-secret: test-google-client-secret
+            scope:
+              - openid
+              - profile
+              - email

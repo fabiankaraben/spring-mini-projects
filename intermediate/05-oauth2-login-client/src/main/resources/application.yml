@@ -1,0 +1,64 @@
+spring:
+  application:
+    name: oauth2-login-client
+
+  # ── DataSource ─────────────────────────────────────────────────────────────
+  datasource:
+    # Default URL targets a local PostgreSQL instance.
+    # When running via Docker Compose, this is overridden by the
+    # SPRING_DATASOURCE_URL environment variable defined in docker-compose.yml
+    # so that "db" resolves to the PostgreSQL container on the internal network.
+    url: jdbc:postgresql://localhost:5432/oauth2logindb
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  # ── JPA / Hibernate ─────────────────────────────────────────────────────────
+  jpa:
+    # create-drop: drop and recreate the schema on every startup/shutdown.
+    # Suitable for development; use "validate" or "none" in production.
+    hibernate:
+      ddl-auto: update
+    # Log generated SQL to stdout for educational visibility
+    show-sql: true
+    properties:
+      hibernate:
+        # Pretty-print the SQL statements so they are easier to read in logs
+        format_sql: true
+        # Target PostgreSQL dialect – lets Hibernate use Postgres-specific SQL features
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # ── OAuth2 Client ──────────────────────────────────────────────────────────
+  # Spring Boot auto-configures the OAuth2 client when these properties are set.
+  # The client-id and client-secret must be obtained from the provider's
+  # developer console (see README.md for step-by-step instructions).
+  security:
+    oauth2:
+      client:
+        registration:
+          # ── GitHub OAuth App ─────────────────────────────────────────────
+          github:
+            # Replace with your GitHub OAuth App credentials.
+            # Create one at: https://github.com/settings/developers
+            # Authorization callback URL: http://localhost:8080/login/oauth2/code/github
+            client-id: ${GITHUB_CLIENT_ID:your-github-client-id}
+            client-secret: ${GITHUB_CLIENT_SECRET:your-github-client-secret}
+            # Request the user's email address in addition to the public profile
+            scope:
+              - read:user
+              - user:email
+          # ── Google OAuth App ─────────────────────────────────────────────
+          google:
+            # Replace with your Google OAuth 2.0 credentials.
+            # Create one at: https://console.developers.google.com/
+            # Authorized redirect URI: http://localhost:8080/login/oauth2/code/google
+            client-id: ${GOOGLE_CLIENT_ID:your-google-client-id}
+            client-secret: ${GOOGLE_CLIENT_SECRET:your-google-client-secret}
+            scope:
+              - openid
+              - profile
+              - email
+
+# ── Server ───────────────────────────────────────────────────────────────────
+server:
+  port: 8080
