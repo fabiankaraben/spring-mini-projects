@@ -1,0 +1,42 @@
+services:
+  # ── MongoDB database ───────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7.0
+    container_name: mongodbcrudapi-mongodb
+    ports:
+      # Expose port 27017 so you can also connect with MongoDB Compass or mongosh:
+      # mongosh "mongodb://localhost:27017/productdb"
+      - "27017:27017"
+    volumes:
+      # Named volume preserves data across container restarts.
+      # Remove this volume (docker volume rm mongodbcrudapi_mongo_data) to start fresh.
+      - mongo_data:/data/db
+    healthcheck:
+      # mongosh ping returns 0 when MongoDB is ready to accept connections
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Spring Boot application ──────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: mongodbcrudapi-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      mongodb:
+        # Wait until MongoDB's healthcheck passes before starting the app;
+        # this avoids "connection refused" errors during application startup.
+        condition: service_healthy
+    environment:
+      # Override the MongoDB host so "mongodb" resolves to the MongoDB service
+      # inside the Docker Compose network instead of looking for localhost.
+      - MONGODB_HOST=mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_DATABASE=productdb
+
+volumes:
+  # Declare the named volume used by the mongodb service
+  mongo_data:
