@@ -1,0 +1,40 @@
+services:
+  # ── Redis cache store ─────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: redisdatacache-redis
+    ports:
+      # Expose port 6379 so you can also connect with a local Redis CLI:
+      # redis-cli -h localhost -p 6379
+      - "6379:6379"
+    volumes:
+      # Named volume preserves cache data across container restarts.
+      # Remove this volume (docker volume rm ...) to start with an empty cache.
+      - redis_data:/data
+    healthcheck:
+      # redis-cli ping returns "PONG" when Redis is ready to accept connections
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Spring Boot application ──────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: redisdatacache-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        # Wait until the Redis healthcheck passes before starting the app;
+        # this avoids connection errors on startup.
+        condition: service_healthy
+    environment:
+      # Override the Redis host so "redis" resolves to the Redis service
+      # inside the Docker Compose network instead of looking for localhost.
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+volumes:
+  # Declare the named volume used by the redis service
+  redis_data:

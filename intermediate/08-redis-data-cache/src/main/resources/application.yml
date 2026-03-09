@@ -1,0 +1,33 @@
+spring:
+  # ── Application name ────────────────────────────────────────────────────────────
+  application:
+    name: redis-data-cache
+
+  # ── Redis connection ─────────────────────────────────────────────────────────────
+  # Spring Boot auto-configures a Lettuce connection pool using these properties.
+  # When running locally (outside Docker) ensure a Redis server is running on
+  # localhost:6379, or use docker compose up to start one automatically.
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}   # Override via env var in Docker Compose
+      port: ${REDIS_PORT:6379}        # Override via env var if using a non-default port
+      # password: ${REDIS_PASSWORD:}  # Uncomment and set if your Redis requires auth
+
+  # ── Cache ────────────────────────────────────────────────────────────────────────
+  # The type is set explicitly to REDIS so there is no ambiguity if another
+  # CacheManager-compatible library is on the classpath.
+  cache:
+    type: redis
+
+# ── Server ──────────────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show Spring Cache debug messages so you can see cache-hit / cache-miss log lines
+    org.springframework.cache: DEBUG
+    # Show Lettuce (Redis client) activity at INFO level (change to DEBUG for more detail)
+    io.lettuce: INFO
+    com.example.redisdatacache: DEBUG

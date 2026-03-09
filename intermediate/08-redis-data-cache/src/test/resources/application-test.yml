@@ -1,0 +1,21 @@
+spring:
+  # ── Redis connection ─────────────────────────────────────────────────────────────
+  # The host and port are overridden at runtime by @DynamicPropertySource in the
+  # integration test class. Testcontainers assigns a random host port to the Redis
+  # container, so we cannot hard-code values here. These act as placeholders only.
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  # ── Cache ────────────────────────────────────────────────────────────────────────
+  cache:
+    type: redis
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Reduce noise in test output; keep at WARN unless debugging cache behaviour
+    org.springframework.cache: WARN
+    io.lettuce: WARN
+    com.example.redisdatacache: INFO
