@@ -1,0 +1,36 @@
+spring:
+  # ── Application name ────────────────────────────────────────────────────────────
+  application:
+    name: rabbitmq-producer
+
+  # ── RabbitMQ connection ───────────────────────────────────────────────────────────
+  # Spring Boot auto-configures a CachingConnectionFactory using these properties.
+  # When running locally (outside Docker) ensure RabbitMQ is running on localhost:5672,
+  # or use `docker compose up` to start one automatically.
+  rabbitmq:
+    # Override via environment variables in Docker Compose.
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    # Virtual host (namespace) – "/" is the default RabbitMQ vhost
+    virtual-host: ${RABBITMQ_VHOST:/}
+
+    # ── Custom properties for exchange/queue topology ────────────────────────────
+    # These are NOT standard Spring Boot properties; they are read by
+    # RabbitMQConfig (@Value) and MessageProducerService (@Value).
+    exchange: orders.exchange
+    queue: orders.queue
+    routing-key: orders.routing.key
+
+# ── Server ──────────────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show Spring AMQP connection and channel activity
+    org.springframework.amqp: DEBUG
+    # Show our application's own log output at DEBUG level
+    com.example.rabbitmqproducer: DEBUG
