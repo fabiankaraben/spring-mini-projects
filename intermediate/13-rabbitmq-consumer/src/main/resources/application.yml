@@ -1,0 +1,52 @@
+spring:
+  # ── Application name ────────────────────────────────────────────────────────────
+  application:
+    name: rabbitmq-consumer
+
+  # ── RabbitMQ connection ───────────────────────────────────────────────────────────
+  # Spring Boot auto-configures a CachingConnectionFactory using these properties.
+  # When running locally (outside Docker) ensure RabbitMQ is running on localhost:5672,
+  # or use `docker compose up` to start one automatically.
+  rabbitmq:
+    # Override via environment variables in Docker Compose (see docker-compose.yml).
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    # Virtual host (namespace) – "/" is the default RabbitMQ vhost
+    virtual-host: ${RABBITMQ_VHOST:/}
+
+    # ── Custom properties for exchange/queue topology ────────────────────────────
+    # These are NOT standard Spring Boot properties; they are read by
+    # RabbitMQConfig (@Value) and MessageConsumerService (@RabbitListener).
+    exchange: orders.exchange
+    queue: orders.queue
+    routing-key: orders.routing.key
+
+    # ── Dead Letter Queue topology ───────────────────────────────────────────────
+    # Messages that fail processing are forwarded here instead of being discarded.
+    dead-letter-exchange: orders.exchange.dlx
+    dead-letter-queue: orders.queue.dlq
+
+    # ── Listener container configuration ─────────────────────────────────────────
+    listener:
+      simple:
+        # AUTO: Spring AMQP sends basic.ack when the listener returns normally,
+        # or basic.nack (with requeue=false) when it throws — dead-lettering applies.
+        acknowledge-mode: AUTO
+        # Number of concurrent consumer threads (1 is the default; increase for
+        # higher throughput at the cost of more connections/channels).
+        concurrency: 1
+        max-concurrency: 1
+
+# ── Server ──────────────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show Spring AMQP listener container and channel activity
+    org.springframework.amqp: DEBUG
+    # Show our application's own log output at DEBUG level
+    com.example.rabbitmqconsumer: DEBUG

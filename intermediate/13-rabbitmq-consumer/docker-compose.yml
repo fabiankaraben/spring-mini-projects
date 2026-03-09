@@ -1,0 +1,51 @@
+services:
+  # ── RabbitMQ message broker ────────────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: rabbitmqconsumer-rabbitmq
+    ports:
+      # AMQP protocol port – Spring Boot connects here to consume messages
+      - "5672:5672"
+      # RabbitMQ Management UI – open http://localhost:15672 in your browser
+      # Default credentials: guest / guest
+      - "15672:15672"
+    environment:
+      # Default username and password for the RabbitMQ broker.
+      # Change these in production and use Docker secrets or a secrets manager.
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      # Named volume preserves queue state and messages across container restarts.
+      # Remove it (docker volume rm rabbitmqconsumer_rabbitmq_data) to start fresh.
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      # rabbitmq-diagnostics ping returns 0 when the broker is ready
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Spring Boot application ────────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: rabbitmqconsumer-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      rabbitmq:
+        # Wait until RabbitMQ's healthcheck passes before starting the app;
+        # this avoids "connection refused" errors during application startup.
+        condition: service_healthy
+    environment:
+      # Override RabbitMQ connection settings so "rabbitmq" resolves to the
+      # broker service inside the Docker Compose network instead of localhost.
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USERNAME=guest
+      - RABBITMQ_PASSWORD=guest
+      - RABBITMQ_VHOST=/
+
+volumes:
+  # Declare the named volume used by the rabbitmq service
+  rabbitmq_data:

@@ -32,7 +32,6 @@ class FormControllerWebMvcTest {
     private FormHandlerService formHandlerService;
 
     @Test
-    @SuppressWarnings("null")
     void testHandleFormSubmissionViaHttp() throws Exception {
         // Mocking the behavior of the service layer
         UserForm mockedForm = new UserForm("alice", "alice@test.com", "Hi!");

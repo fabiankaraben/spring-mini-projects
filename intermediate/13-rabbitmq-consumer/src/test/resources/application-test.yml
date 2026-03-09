@@ -1,0 +1,32 @@
+spring:
+  # ── RabbitMQ connection ───────────────────────────────────────────────────────────
+  # These values are overridden at runtime by @DynamicPropertySource in the
+  # integration test class. Testcontainers assigns random host ports to the
+  # RabbitMQ container, so we cannot hard-code values here.
+  # The placeholders below are overridden before the Spring context starts.
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+
+    # ── Custom topology properties (same as application.yml) ─────────────────────
+    exchange: orders.exchange
+    queue: orders.queue
+    routing-key: orders.routing.key
+    dead-letter-exchange: orders.exchange.dlx
+    dead-letter-queue: orders.queue.dlq
+
+    listener:
+      simple:
+        acknowledge-mode: AUTO
+        concurrency: 1
+        max-concurrency: 1
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Reduce noise in test output; keep at WARN unless debugging RabbitMQ behaviour
+    org.springframework.amqp: WARN
+    com.example.rabbitmqconsumer: INFO
