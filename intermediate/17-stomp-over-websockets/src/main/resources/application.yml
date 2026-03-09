@@ -1,0 +1,8 @@
+spring:
+  application:
+    name: stomp-over-websockets
+
+# ── Server ────────────────────────────────────────────────────────────────────
+server:
+  # Default HTTP port – WebSocket upgrades also happen on this port
+  port: 8080
