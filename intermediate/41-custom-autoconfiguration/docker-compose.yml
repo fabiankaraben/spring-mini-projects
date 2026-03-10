@@ -1,0 +1,69 @@
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL database
+  #
+  # Stores the greeting_logs table. The same postgres:16-alpine image is used
+  # in Testcontainers integration tests to ensure parity between test and
+  # production environments.
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: custom-autoconfig-db
+    environment:
+      POSTGRES_DB: greetingdb
+      POSTGRES_USER: greeting_user
+      POSTGRES_PASSWORD: greeting_pass
+    volumes:
+      # Named volume so data persists across container restarts.
+      # Without this, all greeting logs are lost every time the container restarts.
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Expose port 5432 on the host so you can connect with pgAdmin or psql
+      - "5432:5432"
+    healthcheck:
+      # Docker Compose waits for this check to pass before starting the app.
+      # pg_isready probes the PostgreSQL socket and returns 0 when the server
+      # is accepting connections.
+      test: ["CMD-SHELL", "pg_isready -U greeting_user -d greetingdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Spring Boot application
+  #
+  # Built from the local Dockerfile (multi-stage build: JDK for compile,
+  # JRE for runtime). The environment variables override the application.yml
+  # defaults so the app connects to the Compose-managed PostgreSQL container
+  # instead of localhost.
+  # ---------------------------------------------------------------------------
+  app:
+    build: .
+    container_name: custom-autoconfig-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        # Only start the app after the healthcheck above passes —
+        # prevents connection-refused errors on startup.
+        condition: service_healthy
+    environment:
+      # Override application.yml defaults to use Docker Compose's internal DNS.
+      # Inside the Docker network, services are reachable by their service name
+      # (here: "postgres") rather than "localhost".
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/greetingdb
+      - SPRING_DATASOURCE_USERNAME=greeting_user
+      - SPRING_DATASOURCE_PASSWORD=greeting_pass
+      # Use 'update' DDL so Hibernate creates the schema on first run
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      # Custom starter properties can be overridden here too:
+      # - GREETING_PREFIX=Hi
+      # - GREETING_SUFFIX=.
+      # - GREETING_DEFAULT_NAME=World
+      # - GREETING_ENABLED=true
+
+volumes:
+  # Named volume: data survives container stop/rm; removed only by `docker volume rm`
+  postgres_data:

@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.example</groupId>
+	<artifactId>custom-autoconfiguration</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>custom-autoconfiguration</name>
+	<description>
+		Spring Boot mini-project demonstrating how to build a custom Spring Boot Starter
+		with auto-configured beans. The project contains both the starter library code
+		(greeting-spring-boot-starter) and an application that consumes it, showing the
+		complete lifecycle of auto-configuration: @AutoConfiguration, @ConditionalOn*,
+		@ConfigurationProperties, and the AutoConfiguration.imports registration file.
+	</description>
+
+	<properties>
+		<java.version>21</java.version>
+		<!-- Testcontainers BOM version for integration tests -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+
+	<dependencies>
+		<!--
+			Spring Boot Web: provides REST API support via Spring MVC.
+			The demo application exposes endpoints that use the auto-configured
+			GreetingService from our custom starter.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Validation: Bean Validation (JSR-380) annotations such as
+			@NotBlank on request DTOs, validated automatically via @Valid in controllers.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!--
+			Spring Data JPA: persistence layer for the GreetingLog entity.
+			Every greeting request is persisted to PostgreSQL so we can demonstrate
+			the starter working alongside standard Spring Boot infrastructure.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Actuator: exposes /actuator/health and /actuator/info endpoints.
+			Also registers our custom GreetingHealthIndicator (from the starter) to show
+			how starters can contribute to the application's health check.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot AutoConfigure: provides the @AutoConfiguration, @Conditional*
+			annotations and the AutoConfigureAfter/Before ordering annotations used
+			inside the custom starter code.
+			It is already on the classpath via spring-boot-starter but listed explicitly
+			here for documentation purposes.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-autoconfigure</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot AutoConfigure Processor (optional, annotation processor):
+			Generates spring-autoconfigure-metadata.properties at compile time from
+			@ConditionalOn* annotations so Spring Boot can filter auto-configurations
+			without loading the class. This is what production starters do to keep
+			startup fast. The 'optional = true' mirrors what the Spring Boot team uses.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-autoconfigure-processor</artifactId>
+			<optional>true</optional>
+		</dependency>
+
+		<!--
+			Spring Boot Configuration Processor (annotation processor):
+			Reads @ConfigurationProperties classes and generates
+			spring-configuration-metadata.json so IDEs provide auto-complete for
+			custom properties (e.g. greeting.prefix, greeting.enabled).
+			'optional = true' means it does not become a transitive dependency for
+			applications that depend on this starter.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-configuration-processor</artifactId>
+			<optional>true</optional>
+		</dependency>
+
+		<!--
+			PostgreSQL JDBC driver.
+			Used at runtime by the DataSource to connect to the PostgreSQL database
+			running either as a Docker container (docker-compose) or as a
+			Testcontainers-managed container during integration tests.
+		-->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!--
+			Spring Boot Test: pulls in JUnit 5, AssertJ, Mockito, MockMvc and all the
+			Spring test infrastructure needed for both unit and integration tests.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers JUnit 5 integration: provides the @Testcontainers class-level
+			annotation and @Container field annotation to manage Docker container
+			lifecycle automatically alongside the JUnit 5 test lifecycle.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers PostgreSQL module: starts a real postgres:16-alpine Docker
+			container before integration tests run, giving us a production-equivalent
+			database without any manual setup or local installation required.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<!-- Manage all Testcontainers module versions via BOM so they stay in sync -->
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin: packages the application as an executable fat-jar -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+			<!--
+				Maven Surefire Plugin: configures test execution for Java 21+.
+
+				argLine breakdown:
+				  -XX:+EnableDynamicAgentLoading  - silences Mockito ByteBuddy agent warnings
+				  -Xshare:off                     - disables class-data sharing to avoid conflicts
+				  -Dnet.bytebuddy.experimental    - required on Java 25+; harmless on Java 21
+				  add-opens                       - grants ByteBuddy/Mockito deep reflection access
+
+				DOCKER_API_VERSION=1.44:
+				  Docker Desktop 29+ rejects the legacy v1.24 API path that docker-java uses
+				  by default. Setting 1.44 here (and in the docker-java.properties classpath
+				  resource) makes Testcontainers work correctly on Docker Desktop 29+.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off -Dnet.bytebuddy.experimental=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<!-- Ensures docker-java uses API v1.44 (Docker Desktop 29+ requires this) -->
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+</project>

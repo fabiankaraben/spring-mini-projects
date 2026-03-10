@@ -1,0 +1,76 @@
+spring:
+  application:
+    name: custom-autoconfiguration
+
+  # ---------------------------------------------------------------------------
+  # DataSource configuration
+  #
+  # Default values target a locally running PostgreSQL instance (e.g. started
+  # via docker-compose.yml for local development). When running the full stack
+  # inside Docker Compose, these are overridden by environment variables set in
+  # docker-compose.yml:
+  #   SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD
+  # ---------------------------------------------------------------------------
+  datasource:
+    url: jdbc:postgresql://localhost:5432/greetingdb
+    username: greeting_user
+    password: greeting_pass
+    driver-class-name: org.postgresql.Driver
+
+  # ---------------------------------------------------------------------------
+  # JPA / Hibernate configuration
+  # ---------------------------------------------------------------------------
+  jpa:
+    # 'update' — Hibernate creates or updates tables to match entities on startup.
+    # Suitable for development and demos; use Flyway/Liquibase in production.
+    hibernate:
+      ddl-auto: update
+    # Log the SQL Hibernate generates — helpful for learning/debugging
+    show-sql: true
+    properties:
+      hibernate:
+        # Pretty-print the logged SQL for readability
+        format_sql: true
+        # Explicit PostgreSQL dialect avoids auto-detection overhead at startup
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+# REST API port
+server:
+  port: 8080
+
+# Pretty-print JSON responses — helpful for learning and debugging
+spring.jackson.serialization.indent_output: true
+
+# ---------------------------------------------------------------------------
+# Custom Greeting Starter properties
+#
+# These properties are bound to GreetingProperties via @ConfigurationProperties.
+# The starter is activated by greeting.enabled=true (default).
+# Change these values to see the auto-configuration respond dynamically:
+#
+#   greeting.prefix=Hi       → "Hi, Alice!"
+#   greeting.suffix=.        → "Hello, Alice."
+#   greeting.default-name=Spring → "Hello, Spring!" (when no name is sent)
+#   greeting.enabled=false   → disables the starter entirely (no GreetingService bean)
+# ---------------------------------------------------------------------------
+greeting:
+  enabled: true
+  prefix: "Hello"
+  suffix: "!"
+  default-name: "World"
+
+# ---------------------------------------------------------------------------
+# Spring Boot Actuator — expose health and info endpoints
+#
+# By default (Spring Boot 3) only /actuator/health is exposed over HTTP.
+# We also expose /actuator/info for completeness.
+# The 'always' show-details lets us see the greeting health indicator details.
+# ---------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

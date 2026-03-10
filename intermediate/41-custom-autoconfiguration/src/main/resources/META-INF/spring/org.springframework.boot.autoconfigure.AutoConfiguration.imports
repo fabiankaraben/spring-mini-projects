@@ -1,0 +1,28 @@
+# =============================================================================
+# Custom Starter Auto-Configuration Registration File
+#
+# Spring Boot 3.x discovers auto-configurations by reading this file at startup.
+# Each line must be the fully-qualified class name of an @AutoConfiguration class.
+#
+# This replaces the legacy spring.factories mechanism from Spring Boot 2.x:
+#   OLD (Spring Boot 2.x):
+#     src/main/resources/META-INF/spring.factories
+#     org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+#       com.example.autoconfiguration.starter.GreetingAutoConfiguration
+#
+#   NEW (Spring Boot 3.x):
+#     src/main/resources/META-INF/spring/
+#       org.springframework.boot.autoconfigure.AutoConfiguration.imports
+#     com.example.autoconfiguration.starter.GreetingAutoConfiguration
+#
+# How it works:
+#   1. SpringApplication starts and invokes AutoConfigurationImportSelector.
+#   2. The selector reads ALL AutoConfiguration.imports files found in every JAR
+#      on the classpath (including this one) using SpringFactoriesLoader.
+#   3. For each listed class, Spring Boot evaluates its @Conditional* annotations.
+#   4. Only classes whose conditions pass are added to the application context.
+#
+# In a real-world multi-module project this file would live in the starter JAR.
+# Here it demonstrates exactly what would be in that JAR's resources folder.
+# =============================================================================
+com.example.autoconfiguration.starter.GreetingAutoConfiguration
