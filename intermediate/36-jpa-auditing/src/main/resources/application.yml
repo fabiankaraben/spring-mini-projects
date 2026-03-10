@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: jpa-auditing
+
+  # ---------------------------------------------------------------------------
+  # DataSource configuration
+  #
+  # Default values are for local development against a PostgreSQL instance
+  # started via docker-compose.yml. When running inside Docker Compose (i.e.
+  # the full stack), these values are overridden by environment variables
+  # set in docker-compose.yml:
+  #   SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD
+  # ---------------------------------------------------------------------------
+  datasource:
+    url: jdbc:postgresql://localhost:5432/articlesdb
+    username: articles_user
+    password: articles_pass
+    driver-class-name: org.postgresql.Driver
+
+  # ---------------------------------------------------------------------------
+  # JPA / Hibernate configuration
+  # ---------------------------------------------------------------------------
+  jpa:
+    # 'update' — Hibernate auto-creates/updates tables to match entities on startup.
+    # Fine for development and demos. For production, prefer Flyway or Liquibase.
+    hibernate:
+      ddl-auto: update
+    # Log the SQL that Hibernate generates (educational — shows the INSERT/UPDATE
+    # statements that carry the audited timestamps into the database)
+    show-sql: true
+    properties:
+      hibernate:
+        # Pretty-print the logged SQL for readability
+        format_sql: true
+        # Explicit PostgreSQL dialect avoids auto-detection overhead at startup
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+# REST API port
+server:
+  port: 8080
+
+# Pretty-print JSON responses — helpful for learning and debugging
+spring.jackson.serialization.indent_output: true

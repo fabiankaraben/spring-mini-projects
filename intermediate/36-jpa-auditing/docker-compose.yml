@@ -1,0 +1,59 @@
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL database
+  #
+  # The same postgres:16-alpine image used in Testcontainers integration tests,
+  # ensuring parity between the test environment and production.
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: jpa-auditing-db
+    environment:
+      POSTGRES_DB: articlesdb
+      POSTGRES_USER: articles_user
+      POSTGRES_PASSWORD: articles_pass
+    volumes:
+      # Named volume so data persists across container restarts.
+      # Without this, all article records are lost every time the container restarts.
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Expose port 5432 on the host so you can connect with pgAdmin or psql
+      - "5432:5432"
+    healthcheck:
+      # Docker Compose waits for this check to pass before starting the app.
+      # pg_isready probes the PostgreSQL socket and returns 0 when the server
+      # is accepting connections.
+      test: ["CMD-SHELL", "pg_isready -U articles_user -d articlesdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Spring Boot application
+  # ---------------------------------------------------------------------------
+  app:
+    build: .
+    container_name: jpa-auditing-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        # Only start the app after the healthcheck above passes —
+        # prevents connection-refused errors on startup.
+        condition: service_healthy
+    environment:
+      # Override application.yml defaults to use Docker Compose's internal DNS.
+      # Inside the Docker network, services are reachable by their service name
+      # (here: "postgres") rather than "localhost".
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/articlesdb
+      - SPRING_DATASOURCE_USERNAME=articles_user
+      - SPRING_DATASOURCE_PASSWORD=articles_pass
+      # Use 'update' DDL so Hibernate creates the schema on first run and
+      # keeps it in sync with entity changes on subsequent runs.
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+
+volumes:
+  # Named volume: data survives container stop/rm; removed only by `docker volume rm`
+  postgres_data:
