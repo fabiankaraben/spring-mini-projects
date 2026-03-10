@@ -1,0 +1,74 @@
+spring:
+  application:
+    name: vault-secrets
+
+  # -------------------------------------------------------------------------
+  # Spring Cloud Vault configuration.
+  #
+  # Spring Cloud Vault connects to HashiCorp Vault at application startup
+  # and fetches secrets that are then available as Spring properties.
+  # The token below is the root token used in development/Docker Compose.
+  # In production, use a more restricted token or a different auth method
+  # (AppRole, Kubernetes, AWS IAM, etc.).
+  # -------------------------------------------------------------------------
+  cloud:
+    vault:
+      # Vault server address
+      host: localhost
+      port: 8200
+      # Use HTTP for local development; use HTTPS in production
+      scheme: http
+      # Authentication method: "token" is the simplest for development.
+      # The application presents this token to Vault on every request.
+      authentication: TOKEN
+      token: root-token
+      # KV v2 secrets engine configuration
+      kv:
+        # Enable the KV (key-value) secrets engine backend
+        enabled: true
+        # The KV v2 mount path in Vault (default: "secret")
+        backend: secret
+        # Path prefix within the KV backend where Spring Cloud Vault
+        # will look for application-level secrets at startup.
+        # E.g. it will read "secret/data/vault-secrets" automatically.
+        default-context: vault-secrets
+
+  # -------------------------------------------------------------------------
+  # H2 in-memory database configuration.
+  #
+  # H2 is used to store credential metadata (name, path, description).
+  # No secret values are stored here.
+  # The console is enabled for local development inspection.
+  # -------------------------------------------------------------------------
+  datasource:
+    url: jdbc:h2:mem:vaultsecrets;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+  # -------------------------------------------------------------------------
+  # JPA / Hibernate configuration.
+  # -------------------------------------------------------------------------
+  jpa:
+    # Hibernate DDL auto: "create-drop" creates the schema at startup and
+    # drops it on shutdown — ideal for an in-memory dev database.
+    hibernate:
+      ddl-auto: create-drop
+    # Log SQL statements for educational purposes
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  # Enable H2 web console (accessible at http://localhost:8080/h2-console)
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# REST API port
+server:
+  port: 8080
+
+# Enable pretty-printed JSON responses (helpful for learning / debugging)
+spring.jackson.serialization.indent_output: true
