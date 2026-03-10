@@ -1,0 +1,225 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# GraphQL Schema for the Task Manager – GraphQL Mutations Demo
+#
+# This schema is the focal point of the mini-project. It defines:
+#   - Two output types (Project, Task) that model the domain.
+#   - One enum type (TaskStatus) for the task lifecycle.
+#   - Input types for mutations (ProjectInput, TaskInput).
+#   - A Query type for read operations.
+#   - A rich Mutation type demonstrating two mutation patterns:
+#       1. Standard CRUD mutations (create, update, delete).
+#       2. State-transition mutations (startTask, completeTask, reopenTask)
+#          that model domain-specific operations with business rules.
+#
+# Spring for GraphQL auto-discovers all *.graphqls files in the classpath
+# location `graphql/` (configurable via spring.graphql.schema.locations).
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Custom scalar ─────────────────────────────────────────────────────────────
+# GraphQL's built-in Int type is 32-bit, but Java Long (used for JPA IDs)
+# is 64-bit. We declare a Long scalar here and register it in GraphQlConfig.java
+# using the graphql-java-extended-scalars library.
+scalar Long
+
+# ── Enum type ─────────────────────────────────────────────────────────────────
+# Enums in GraphQL restrict a field or argument to one of a fixed set of values.
+# The client must supply one of: TODO, IN_PROGRESS, or DONE.
+# On the server side this maps to the Java enum TaskStatus.
+
+"""
+Represents the lifecycle status of a Task.
+The valid state transitions are: TODO → IN_PROGRESS → DONE.
+A DONE task can be reopened back to TODO via the reopenTask mutation.
+"""
+enum TaskStatus {
+    "The task has been created but not yet started."
+    TODO
+
+    "The task is currently being worked on."
+    IN_PROGRESS
+
+    "The task has been completed."
+    DONE
+}
+
+# ── Output types ──────────────────────────────────────────────────────────────
+# Output types define the shape of data returned by queries and mutations.
+# They can reference each other to form an object graph that clients can
+# traverse in a single request.
+
+"""
+Represents a project in the task manager.
+A project groups related tasks together.
+"""
+type Project {
+    "Unique identifier for the project (database primary key)."
+    id: ID!
+
+    "Name of the project."
+    name: String!
+
+    "Optional description providing context about the project's goals."
+    description: String
+
+    "All tasks belonging to this project."
+    tasks: [Task!]!
+}
+
+"""
+Represents a task in the task manager.
+Every task belongs to exactly one project and has a status lifecycle.
+"""
+type Task {
+    "Unique identifier for the task (database primary key)."
+    id: ID!
+
+    "Title of the task."
+    title: String!
+
+    "Optional detailed description of the work to be done."
+    description: String
+
+    "Current lifecycle status: TODO, IN_PROGRESS, or DONE."
+    status: TaskStatus!
+
+    "Priority level: 1 (highest) to 5 (lowest). Default is 3."
+    priority: Int!
+
+    "The project this task belongs to."
+    project: Project!
+}
+
+# ── Input types ───────────────────────────────────────────────────────────────
+# Input types are separate from output types in GraphQL.
+# They are used exclusively as argument types in mutations.
+# This separation prevents clients from accidentally passing output-type fields
+# (like generated IDs) where they don't belong.
+
+"""
+Input payload for creating or updating a project.
+"""
+input ProjectInput {
+    "Name of the project. Required."
+    name: String!
+
+    "Optional description for the project."
+    description: String
+}
+
+"""
+Input payload for creating or updating a task.
+Note: status is NOT part of this input — use the dedicated state-transition
+mutations (startTask, completeTask, reopenTask) to change a task's status.
+This design is a key GraphQL best practice: expose intent-revealing operations
+rather than generic field-update inputs.
+"""
+input TaskInput {
+    "Title of the task. Required."
+    title: String!
+
+    "Optional detailed description."
+    description: String
+
+    "Priority level from 1 (highest) to 5 (lowest). Defaults to 3."
+    priority: Int = 3
+
+    "ID of the project this task belongs to. Required."
+    projectId: ID!
+}
+
+# ── Root Query type ───────────────────────────────────────────────────────────
+# Every GraphQL API must have a Query type. Each field defines a named
+# entry point for read operations.
+
+type Query {
+    "Retrieve all projects."
+    projects: [Project!]!
+
+    "Retrieve a single project by ID. Returns null if not found."
+    project(id: ID!): Project
+
+    "Search projects by name (case-insensitive, substring match)."
+    searchProjects(name: String!): [Project!]!
+
+    "Retrieve all tasks."
+    tasks: [Task!]!
+
+    "Retrieve a single task by ID. Returns null if not found."
+    task(id: ID!): Task
+
+    "Retrieve all tasks belonging to a specific project."
+    tasksByProject(projectId: ID!): [Task!]!
+
+    "Retrieve all tasks with a specific status."
+    tasksByStatus(status: TaskStatus!): [Task!]!
+
+    "Retrieve all tasks in a project filtered by status. Useful for kanban boards."
+    tasksByProjectAndStatus(projectId: ID!, status: TaskStatus!): [Task!]!
+}
+
+# ── Root Mutation type ────────────────────────────────────────────────────────
+# The Mutation type defines all write operations. This is the primary focus
+# of the mini-project. Notice two distinct mutation patterns:
+#
+# 1. STANDARD CRUD MUTATIONS – generic create, update, delete operations.
+#    These correspond to POST, PUT/PATCH, and DELETE in REST.
+#
+# 2. STATE-TRANSITION MUTATIONS – domain-specific operations that encapsulate
+#    a specific state change and its business rules.
+#    Instead of: updateTask(id: 1, input: { status: IN_PROGRESS })
+#    We expose:  startTask(id: 1)
+#    Benefits:
+#      - The operation name communicates intent clearly.
+#      - The server can enforce which transitions are valid.
+#      - Clients don't need to know the internal state machine.
+
+type Mutation {
+    # ── Project CRUD mutations ─────────────────────────────────────────────
+
+    "Create a new project."
+    createProject(input: ProjectInput!): Project!
+
+    "Update an existing project's name and/or description. Returns null if not found."
+    updateProject(id: ID!, input: ProjectInput!): Project
+
+    "Delete a project by ID. Also deletes all tasks in the project. Returns true if deleted."
+    deleteProject(id: ID!): Boolean!
+
+    # ── Task CRUD mutations ────────────────────────────────────────────────
+
+    "Create a new task. The task is automatically assigned TODO status."
+    createTask(input: TaskInput!): Task!
+
+    "Update a task's title, description, priority, or project. Returns null if not found."
+    updateTask(id: ID!, input: TaskInput!): Task
+
+    "Delete a task by ID. Returns true if deleted, false if not found."
+    deleteTask(id: ID!): Boolean!
+
+    # ── Task state-transition mutations ────────────────────────────────────
+    # These are the highlight of the mini-project: intent-revealing mutations
+    # that model the task lifecycle as explicit GraphQL operations.
+
+    """
+    Start a task: transitions its status from TODO to IN_PROGRESS.
+    Returns an error if the task is not currently in TODO status.
+    Returns null if the task is not found.
+    """
+    startTask(id: ID!): Task
+
+    """
+    Complete a task: transitions its status to DONE.
+    Can be called from either TODO or IN_PROGRESS status.
+    Returns an error if the task is already DONE.
+    Returns null if the task is not found.
+    """
+    completeTask(id: ID!): Task
+
+    """
+    Reopen a completed task: transitions its status from DONE back to TODO.
+    Useful when a completed task needs to be revisited (e.g., a bug was found).
+    Returns an error if the task is not currently in DONE status.
+    Returns null if the task is not found.
+    """
+    reopenTask(id: ID!): Task
+}

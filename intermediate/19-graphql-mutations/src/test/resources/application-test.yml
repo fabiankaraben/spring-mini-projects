@@ -1,0 +1,29 @@
+spring:
+  # ── JPA / Hibernate ───────────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      # create-drop: create schema before tests and drop it after the test session.
+      # This ensures every test run starts with a clean schema derived from the entities.
+      ddl-auto: create-drop
+    # Disable SQL logging noise during test runs; enable only if debugging queries
+    show-sql: false
+
+  # ── GraphQL ───────────────────────────────────────────────────────────────────────
+  graphql:
+    # Disable GraphiQL in test runs (no browser needed)
+    graphiql:
+      enabled: false
+    schema:
+      printer:
+        enabled: false
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Reduce Hibernate noise in test output
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN
+    # Keep application-level logs at INFO so we can see what tests are doing
+    com.example.graphqlmutations: INFO
+    # Suppress Spring for GraphQL debug noise
+    org.springframework.graphql: WARN

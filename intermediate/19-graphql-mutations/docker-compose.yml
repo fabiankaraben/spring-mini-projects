@@ -1,0 +1,53 @@
+services:
+  # ── PostgreSQL database ────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: graphqlmutations-postgres
+    ports:
+      # Expose port 5432 so you can also connect with a GUI client such as DBeaver or psql:
+      # psql -h localhost -U taskuser -d taskdb
+      - "5432:5432"
+    environment:
+      # Credentials used by the Spring Boot application (must match application.yml)
+      POSTGRES_DB: taskdb
+      POSTGRES_USER: taskuser
+      POSTGRES_PASSWORD: taskpass
+    volumes:
+      # Named volume preserves data across container restarts.
+      # Remove this volume (docker volume rm graphqlmutations_postgres_data) to start fresh.
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready returns 0 when PostgreSQL is accepting connections
+      test: ["CMD-SHELL", "pg_isready -U taskuser -d taskdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Spring Boot application ────────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: graphqlmutations-app
+    ports:
+      # Map host port 8080 to the container port where Spring Boot listens
+      - "8080:8080"
+    depends_on:
+      postgres:
+        # Wait until PostgreSQL's healthcheck passes before starting the app;
+        # this avoids "connection refused" errors during application startup.
+        condition: service_healthy
+    environment:
+      # Override DataSource settings so "postgres" resolves to the PostgreSQL
+      # service inside the Docker Compose network rather than localhost.
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: taskdb
+      DB_USERNAME: taskuser
+      DB_PASSWORD: taskpass
+      # Use 'update' so Hibernate auto-creates/updates the schema on startup.
+      # Switch to 'validate' once the schema is stable in a production setting.
+      JPA_DDL_AUTO: update
+
+volumes:
+  # Declare the named volume used by the postgres service
+  postgres_data:
