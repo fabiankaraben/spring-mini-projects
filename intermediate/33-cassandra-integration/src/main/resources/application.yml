@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: cassandra-integration
+
+  # -------------------------------------------------------------------------
+  # Spring Data Cassandra connection configuration.
+  #
+  # Cassandra uses a "keyspace" as its top-level namespace (similar to a
+  # database/schema in relational systems). Tables live inside a keyspace.
+  #
+  # In production (Docker Compose), these values are overridden via
+  # environment variables (e.g. SPRING_CASSANDRA_CONTACT_POINTS).
+  # -------------------------------------------------------------------------
+  cassandra:
+    # Contact points: comma-separated list of Cassandra host:port entries.
+    # The driver connects to these nodes first to discover the full cluster topology.
+    contact-points: localhost:9042
+
+    # The keyspace where our "products" table lives.
+    # Created automatically via schema-action below.
+    keyspace-name: catalog
+
+    # Local datacenter name. Must match what Cassandra reports in system.local.
+    # For a single-node local/Docker instance this is typically "datacenter1".
+    local-datacenter: datacenter1
+
+    # Schema action performed at startup:
+    # - NONE: do nothing (use pre-created schema)
+    # - CREATE: create tables if they don't exist
+    # - CREATE_IF_NOT_EXISTS: same but safe to run repeatedly
+    # - RECREATE: drop and recreate (data loss!)
+    # We use CREATE_IF_NOT_EXISTS for local dev convenience.
+    schema-action: CREATE_IF_NOT_EXISTS
+
+    # NOTE: The keyspace must exist before the application starts.
+    # Spring Boot's Cassandra auto-configuration connects to Cassandra with the
+    # keyspace already set; it does NOT create the keyspace for you.
+    # - When running locally: start Cassandra and run the init script below.
+    # - When running via Docker Compose: the app waits for the Cassandra healthcheck
+    #   and the entrypoint creates the keyspace automatically.
+    # - When running integration tests: Testcontainers creates the keyspace via a
+    #   raw CqlSession in @DynamicPropertySource before the Spring context starts.
+
+# REST API port
+server:
+  port: 8080
+
+# Enable pretty-printed JSON responses (helpful for learning / debugging)
+spring.jackson.serialization.indent_output: true

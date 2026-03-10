@@ -1,0 +1,71 @@
+services:
+  # Apache Cassandra — wide-column NoSQL database
+  # Native transport (CQL) is on port 9042 (used by the Spring app)
+  cassandra:
+    image: cassandra:4.1
+    container_name: cassandra-integration-db
+    environment:
+      # CASSANDRA_CLUSTER_NAME: logical name of the cluster (informational)
+      CASSANDRA_CLUSTER_NAME: catalog-cluster
+      # CASSANDRA_DC: datacenter name — must match spring.cassandra.local-datacenter
+      CASSANDRA_DC: datacenter1
+      # CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch supports DC-aware routing
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+      # Heap settings for a dev/demo environment (reduce from default 4GB)
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 100M
+    ports:
+      - "9042:9042"   # CQL native transport (used by Spring Data Cassandra driver)
+    volumes:
+      # Persist Cassandra data between container restarts
+      - cassandra_data:/var/lib/cassandra
+    healthcheck:
+      # Use cqlsh to check if Cassandra is ready to accept CQL connections
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # One-shot init container: creates the "catalog" keyspace before the app starts.
+  #
+  # Spring Boot's Cassandra driver connects with the keyspace name already set
+  # (from SPRING_CASSANDRA_KEYSPACE_NAME). If the keyspace does not exist, the
+  # driver throws InvalidKeyspaceException. This service creates it first.
+  cassandra-init:
+    image: cassandra:4.1
+    container_name: cassandra-integration-init
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    # Run cqlsh against the cassandra service and create the keyspace, then exit.
+    # "restart: on-failure" ensures it retries if Cassandra isn't fully ready yet.
+    command: >
+      cqlsh cassandra -e "
+        CREATE KEYSPACE IF NOT EXISTS catalog
+          WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1'}
+          AND durable_writes = true;
+      "
+    restart: on-failure
+
+  # Spring Boot application
+  app:
+    build: .
+    container_name: cassandra-integration-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      cassandra:
+        condition: service_healthy
+      cassandra-init:
+        condition: service_completed_successfully
+    environment:
+      # Override application.yml to point to the "cassandra" service via Docker DNS
+      # Docker Compose's internal DNS resolves "cassandra" to the container's IP
+      - SPRING_CASSANDRA_CONTACT_POINTS=cassandra:9042
+      - SPRING_CASSANDRA_LOCAL_DATACENTER=datacenter1
+      - SPRING_CASSANDRA_KEYSPACE_NAME=catalog
+      - SPRING_CASSANDRA_SCHEMA_ACTION=CREATE_IF_NOT_EXISTS
+
+volumes:
+  cassandra_data:
