@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: neo4j-graph-api
+
+  # Spring Data Neo4j connection configuration.
+  # In production (Docker Compose), these values are overridden via environment variables.
+  neo4j:
+    uri: bolt://localhost:7687       # Bolt protocol is the binary transport layer for Neo4j
+    authentication:
+      username: neo4j
+      password: password
+
+  # Spring Data Neo4j repository scanning
+  data:
+    neo4j:
+      repositories:
+        enabled: true
+
+server:
+  port: 8080
+
+# Enable pretty-printed JSON responses (helpful for learning / debugging)
+spring.jackson.serialization.indent_output: true

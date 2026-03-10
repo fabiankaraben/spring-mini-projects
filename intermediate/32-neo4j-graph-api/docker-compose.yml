@@ -1,0 +1,42 @@
+services:
+  # Neo4j graph database
+  # The browser UI is accessible at http://localhost:7474
+  # The Bolt (binary) protocol is on port 7687 (used by the Spring app)
+  neo4j:
+    image: neo4j:5
+    container_name: neo4j-graph-api-db
+    environment:
+      # Set the admin password for the neo4j user
+      NEO4J_AUTH: neo4j/password
+    ports:
+      - "7474:7474"   # Neo4j Browser (HTTP)
+      - "7687:7687"   # Bolt protocol (used by Spring Data Neo4j)
+    volumes:
+      # Persist graph data between container restarts
+      - neo4j_data:/data
+    healthcheck:
+      # Use the Neo4j cypher-shell to verify the database is ready
+      test: ["CMD", "neo4j", "status"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # Spring Boot application
+  app:
+    build: .
+    container_name: neo4j-graph-api-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      # Override application.yml with the Docker Compose service name "neo4j"
+      # Docker's internal DNS resolves "neo4j" to the neo4j container's IP
+      - SPRING_NEO4J_URI=bolt://neo4j:7687
+      - SPRING_NEO4J_AUTHENTICATION_USERNAME=neo4j
+      - SPRING_NEO4J_AUTHENTICATION_PASSWORD=password
+
+volumes:
+  neo4j_data:
