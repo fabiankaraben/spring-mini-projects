@@ -1,0 +1,155 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# GraphQL Schema for the Library API
+#
+# This file defines the complete type system for the GraphQL API.
+# Spring for GraphQL auto-discovers all *.graphqls files in the
+# classpath location `graphql/` (configurable via spring.graphql.schema.locations).
+#
+# Key concepts used in this schema:
+#  - Types: define the shape of objects returned by the API
+#  - Input types: define the shape of arguments sent by clients (mutations)
+#  - Query type: defines all available read operations
+#  - Mutation type: defines all available write operations
+#  - Non-null (!): marks a field as guaranteed non-null; null would be a server error
+#  - Scalar types: built-in (ID, String, Boolean, Int) + custom (Date)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Custom scalar ─────────────────────────────────────────────────────────────
+# The built-in GraphQL scalars don't include a date type, so we declare a custom
+# one. Spring for GraphQL ships with extended scalars including `Date` (maps to
+# java.time.LocalDate) when the `graphql-java-extended-scalars` library is on
+# the classpath. We register this scalar in GraphQlConfig.java.
+scalar Date
+
+# ── Output types ──────────────────────────────────────────────────────────────
+
+"""
+Represents an author in the library system.
+An author can write zero or many books.
+"""
+type Author {
+    "Unique identifier for the author (database primary key)."
+    id: ID!
+
+    "Full name of the author."
+    name: String!
+
+    "Short biography. May be null if not yet provided."
+    bio: String
+
+    "All books written by this author."
+    books: [Book!]!
+}
+
+"""
+Represents a book in the library system.
+Every book is written by exactly one author.
+"""
+type Book {
+    "Unique identifier for the book (database primary key)."
+    id: ID!
+
+    "Title of the book."
+    title: String!
+
+    "International Standard Book Number (ISBN)."
+    isbn: String!
+
+    "Date of first publication. May be null if unknown."
+    publishedDate: Date
+
+    "Genre or category (e.g. 'Science Fiction', 'History'). May be null."
+    genre: String
+
+    "The author who wrote this book."
+    author: Author!
+}
+
+# ── Input types ───────────────────────────────────────────────────────────────
+# Input types are separate from output types in GraphQL.
+# They are used exclusively as argument types for mutations.
+
+"""
+Input payload for creating or updating an author.
+"""
+input AuthorInput {
+    "Full name of the author. Required."
+    name: String!
+
+    "Short biography. Optional."
+    bio: String
+}
+
+"""
+Input payload for creating or updating a book.
+"""
+input BookInput {
+    "Title of the book. Required."
+    title: String!
+
+    "International Standard Book Number. Required and must be unique."
+    isbn: String!
+
+    "Date of first publication. Optional (format: YYYY-MM-DD)."
+    publishedDate: Date
+
+    "Genre or category. Optional."
+    genre: String
+
+    "ID of the author who wrote this book. Required."
+    authorId: ID!
+}
+
+# ── Root Query type ───────────────────────────────────────────────────────────
+# Every GraphQL API must have a Query type. Each field here is a named
+# entry point that clients can query. Fields marked with `!` are non-null.
+
+type Query {
+    "Retrieve all authors."
+    authors: [Author!]!
+
+    "Retrieve a single author by ID. Returns null if not found."
+    author(id: ID!): Author
+
+    "Search authors by name (case-insensitive, substring match)."
+    searchAuthors(name: String!): [Author!]!
+
+    "Retrieve all books."
+    books: [Book!]!
+
+    "Retrieve a single book by ID. Returns null if not found."
+    book(id: ID!): Book
+
+    "Retrieve all books in a given genre (case-insensitive)."
+    booksByGenre(genre: String!): [Book!]!
+
+    "Retrieve all books written by a specific author."
+    booksByAuthor(authorId: ID!): [Book!]!
+
+    "Search books by title (case-insensitive, substring match)."
+    searchBooks(title: String!): [Book!]!
+}
+
+# ── Root Mutation type ────────────────────────────────────────────────────────
+# The Mutation type defines all write operations (create, update, delete).
+# In REST this would map to POST, PUT, and DELETE endpoints respectively.
+
+type Mutation {
+    "Create a new author."
+    createAuthor(input: AuthorInput!): Author!
+
+    "Update an existing author. Returns null if the author is not found."
+    updateAuthor(id: ID!, input: AuthorInput!): Author
+
+    "Delete an author by ID. Returns true if deleted, false if not found."
+    deleteAuthor(id: ID!): Boolean!
+
+    "Create a new book."
+    createBook(input: BookInput!): Book!
+
+    "Update an existing book. Returns null if the book is not found."
+    updateBook(id: ID!, input: BookInput!): Book
+
+    "Delete a book by ID. Returns true if deleted, false if not found."
+    deleteBook(id: ID!): Boolean!
+}

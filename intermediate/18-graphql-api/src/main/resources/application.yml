@@ -1,0 +1,59 @@
+spring:
+  # ── Application name ────────────────────────────────────────────────────────────
+  application:
+    name: graphql-api
+
+  # ── JPA / Hibernate ───────────────────────────────────────────────────────────────
+  jpa:
+    # Use PostgreSQL dialect. Spring Boot 3 auto-detects this from the driver, but
+    # explicit declaration makes the intent clear for readers.
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      # validate: check schema matches entities (safest for production)
+      # update:   auto-alter schema on startup (convenient for development)
+      # create:   drop and recreate schema on startup (useful during active development)
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    # Log SQL statements to the console (disable in production by setting to false)
+    show-sql: true
+    properties:
+      hibernate:
+        # Format multi-line SQL for easier reading in logs
+        format_sql: true
+
+  # ── DataSource (PostgreSQL) ───────────────────────────────────────────────────────
+  # Connection details are overridable via environment variables so the same
+  # application image works in Docker Compose and in bare-metal deployments.
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:librarydb}
+    username: ${DB_USERNAME:libraryuser}
+    password: ${DB_PASSWORD:librarypass}
+    driver-class-name: org.postgresql.Driver
+
+  # ── Spring for GraphQL ────────────────────────────────────────────────────────────
+  graphql:
+    # Locations where Spring searches for *.graphqls schema files on the classpath
+    schema:
+      locations: classpath:graphql/
+      file-extensions: .graphqls
+      # Print the full schema at startup (useful during development)
+      printer:
+        enabled: true
+    # Enable the GraphiQL browser-based IDE at /graphiql (useful for development)
+    graphiql:
+      enabled: true
+
+# ── Server ──────────────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show Hibernate SQL query activity
+    org.hibernate.SQL: DEBUG
+    # Show bind parameter values in Hibernate SQL logs
+    org.hibernate.orm.jdbc.bind: TRACE
+    # Show our application's own log output at DEBUG level
+    com.example.graphqlapi: DEBUG
+    # Show Spring for GraphQL internals
+    org.springframework.graphql: DEBUG
