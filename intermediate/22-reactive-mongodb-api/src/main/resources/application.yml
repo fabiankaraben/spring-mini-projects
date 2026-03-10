@@ -1,0 +1,36 @@
+spring:
+  # ── Application name ────────────────────────────────────────────────────────────
+  application:
+    name: reactive-mongodb-api
+
+  # ── Reactive MongoDB connection ──────────────────────────────────────────────────
+  # Spring Boot auto-configures a reactive MongoDB client using these properties.
+  # The Reactive MongoDB driver (based on the MongoDB Reactive Streams driver) returns
+  # Publisher types (Mono/Flux) for all operations — no thread is ever blocked.
+  data:
+    mongodb:
+      # Override via environment variables in Docker Compose (see docker-compose.yml).
+      # Format: mongodb://[user:password@]<host>:<port>/<database>
+      # When MONGO_URI is not set, defaults to an unauthenticated local MongoDB.
+      # Docker Compose sets MONGO_URI to include credentials and the service hostname.
+      uri: ${MONGO_URI:mongodb://localhost:27017/booksdb}
+      # Automatically create indexes declared with @Indexed on @Document classes.
+      # In production, consider setting this to false and managing indexes manually
+      # to avoid slow startup times on large collections.
+      auto-index-creation: true
+
+# ── Server ──────────────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show Spring Data Reactive MongoDB query activity
+    org.springframework.data.mongodb: DEBUG
+    # Show our application's own log output at DEBUG level
+    com.example.reactivemongodbapi: DEBUG
+    # Reduce Netty event-loop noise (set to DEBUG for connection-level troubleshooting)
+    reactor.netty: INFO
+    # MongoDB driver wire protocol logging (very verbose — enable only for deep debugging)
+    org.mongodb.driver: WARN

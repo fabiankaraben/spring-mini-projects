@@ -1,0 +1,50 @@
+services:
+  # ── MongoDB 7 database ────────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7.0
+    container_name: reactivemongodb-mongodb
+    ports:
+      # Expose port 27017 so you can connect with mongosh or a GUI client:
+      # mongosh "mongodb://localhost:27017/booksdb"
+      - "27017:27017"
+    environment:
+      # MongoDB root credentials. These must match the MONGO_USERNAME / MONGO_PASSWORD
+      # values passed to the app service below and in application.yml.
+      MONGO_INITDB_ROOT_USERNAME: mongouser
+      MONGO_INITDB_ROOT_PASSWORD: mongopass
+      # The database to create on first boot.
+      MONGO_INITDB_DATABASE: booksdb
+    volumes:
+      # Named volume preserves data across container restarts.
+      # Remove with: docker volume rm reactivemongodb_mongodb_data
+      - mongodb_data:/data/db
+    healthcheck:
+      # mongosh exits 0 when MongoDB is ready to accept connections.
+      # The app service will not start until this check passes.
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Spring Boot application (Netty reactive server) ───────────────────────────
+  app:
+    build: .
+    container_name: reactivemongodb-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      mongodb:
+        # Wait until MongoDB's healthcheck passes before starting the app;
+        # this avoids "connection refused" errors during application startup.
+        condition: service_healthy
+    environment:
+      # Override the default localhost URI in application.yml so that
+      # "mongodb" resolves to the MongoDB service inside the Docker Compose
+      # network instead of looking for localhost. Credentials match those
+      # set in the mongodb service's MONGO_INITDB_ROOT_* variables above.
+      - MONGO_URI=mongodb://mongouser:mongopass@mongodb:27017/booksdb?authSource=admin
+
+volumes:
+  # Declare the named volume used by the mongodb service
+  mongodb_data:
