@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.example</groupId>
+	<artifactId>circuitbreaker</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>circuitbreaker</name>
+	<description>Spring Boot mini-project demonstrating fault tolerance using Resilience4j CircuitBreaker</description>
+	<properties>
+		<java.version>21</java.version>
+		<!-- Spring Cloud BOM version – manages all Spring Cloud module versions consistently.
+		     Resilience4j is part of the Spring Cloud Circuit Breaker abstraction. -->
+		<spring-cloud.version>2024.0.1</spring-cloud.version>
+		<!-- Testcontainers BOM version – aligns all Testcontainers module versions -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+	<dependencies>
+		<!-- Spring Boot Web – provides the embedded Tomcat server and @RestController
+		     support. Exposes the REST API that clients use to fetch product data. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!-- Spring Boot Actuator – exposes operational endpoints:
+		     /actuator/health            → overall health with circuit breaker state
+		     /actuator/circuitbreakers   → per-breaker metrics and state
+		     /actuator/metrics           → Micrometer metrics including CB counters -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!-- Resilience4j Spring Boot 3 starter – auto-configures CircuitBreaker,
+		     Retry, RateLimiter, TimeLimiter, and Bulkhead beans from application.yml.
+		     Integrates with Spring AOP so @CircuitBreaker annotations work on beans. -->
+		<dependency>
+			<groupId>io.github.resilience4j</groupId>
+			<artifactId>resilience4j-spring-boot3</artifactId>
+		</dependency>
+
+		<!-- Spring AOP – required by Resilience4j to intercept @CircuitBreaker,
+		     @Retry, and @TimeLimiter annotated methods via AspectJ proxies. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-aop</artifactId>
+		</dependency>
+
+		<!-- Micrometer Prometheus – scrape-friendly metrics endpoint.
+		     Exposes Resilience4j circuit breaker counters and state gauges
+		     at /actuator/prometheus for external monitoring (Prometheus/Grafana). -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+		</dependency>
+
+		<!-- Bean Validation (Hibernate Validator) – @NotBlank, @NotNull, @Positive
+		     on request DTOs. Spring MVC integrates via @Valid. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!-- Spring Boot Test – JUnit 5, AssertJ, Mockito, and MockMvc integration.
+		     Provides @SpringBootTest, @WebMvcTest, and @MockitoBean annotations. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Testcontainers JUnit 5 integration – @Testcontainers and @Container
+		     annotations for managing Docker container lifecycles during integration tests. -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Testcontainers core – base library for programmatic Docker container
+		     management. GenericContainer is used to run WireMock for integration tests. -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- WireMock standalone – HTTP mock server for simulating the upstream
+		     product inventory API in integration tests. Allows stubbing slow,
+		     failing, or erroneous HTTP responses to exercise the circuit breaker. -->
+		<dependency>
+			<groupId>org.wiremock</groupId>
+			<artifactId>wiremock-standalone</artifactId>
+			<version>3.12.1</version>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<dependencyManagement>
+		<dependencies>
+			<!-- Spring Cloud BOM – manages compatible versions of all Spring Cloud
+			     modules (Circuit Breaker, Resilience4j, etc.) so version conflicts
+			     are avoided. Imported with scope=import / type=pom. -->
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-dependencies</artifactId>
+				<version>${spring-cloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<!-- Testcontainers BOM – aligns all Testcontainers module versions -->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin – packages the application as an executable fat JAR -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<!-- Surefire plugin with JVM args required for Mockito on Java 21+ and
+			     the DOCKER_API_VERSION env var required for Testcontainers on Docker Desktop 29+ -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off -Dnet.bytebuddy.experimental=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<!-- Testcontainers uses this to communicate with the Docker daemon.
+						     Docker Desktop 29+ rejects the legacy v1.24 API; 1.44 is required. -->
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+</project>

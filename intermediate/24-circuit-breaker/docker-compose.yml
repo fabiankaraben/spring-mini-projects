@@ -1,0 +1,21 @@
+services:
+  # ── Spring Boot application ────────────────────────────────────────────────────
+  # The circuit breaker application. It calls an external upstream inventory API
+  # whose base URL is configured via the INVENTORY_BASE_URL environment variable.
+  #
+  # This project has no database or message broker. The only container required
+  # is the application itself. Point INVENTORY_BASE_URL at a real or mock service.
+  app:
+    build: .
+    container_name: circuit-breaker-app
+    ports:
+      # Map host port 8080 to the container's port 8080 (Spring Boot default).
+      # Access the API at: http://localhost:8080
+      - "8080:8080"
+    environment:
+      # Base URL of the upstream product/inventory API that the circuit breaker protects.
+      # Replace this with the URL of your real inventory service.
+      # When not set, the default from application.yml is used: http://localhost:9090
+      - INVENTORY_BASE_URL=${INVENTORY_BASE_URL:-http://localhost:9090}
+    # Restart the container automatically if it crashes (useful in production)
+    restart: unless-stopped

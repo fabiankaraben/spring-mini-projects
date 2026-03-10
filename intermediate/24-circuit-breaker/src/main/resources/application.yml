@@ -1,0 +1,110 @@
+spring:
+  # ── Application name ────────────────────────────────────────────────────────────
+  application:
+    name: circuit-breaker
+
+  # ── Jackson JSON serialisation ───────────────────────────────────────────────────
+  # Do not serialise properties whose value is null. Keeps responses clean.
+  jackson:
+    default-property-inclusion: non_null
+
+# ── Server ──────────────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Upstream inventory API ─────────────────────────────────────────────────────────
+# Base URL for the external product/inventory service that this application calls.
+# Override with the INVENTORY_BASE_URL environment variable (e.g., in Docker Compose
+# or when running integration tests against a WireMock instance).
+inventory:
+  base-url: ${INVENTORY_BASE_URL:http://localhost:9090}
+
+# ── Resilience4j Circuit Breaker configuration ──────────────────────────────────────
+resilience4j:
+  circuitbreaker:
+    instances:
+      # "inventoryService" must match the name= attribute in @CircuitBreaker annotations
+      # and the CB_NAME constant in ProductService.
+      inventoryService:
+        # ── Sliding window ──────────────────────────────────────────────────────────
+        # COUNT_BASED: last N calls are used to calculate failure/slow-call rates.
+        # TIME_BASED: calls in the last N seconds are used instead.
+        sliding-window-type: COUNT_BASED
+        # Number of calls in the closed-state window used to calculate rates.
+        # Smaller window (5) means the circuit reacts faster to failures — good for demos.
+        sliding-window-size: 5
+
+        # ── Open / Close thresholds ─────────────────────────────────────────────────
+        # Open the circuit when ≥ 50% of the calls in the window have failed.
+        failure-rate-threshold: 50
+        # Also open the circuit when ≥ 80% of calls exceed the slow-call duration.
+        slow-call-rate-threshold: 80
+        # A call is "slow" when it takes longer than 2 seconds.
+        slow-call-duration-threshold: 2s
+
+        # ── Minimum calls before computing rates ────────────────────────────────────
+        # The circuit breaker will not compute failure/slow-call rates until at least
+        # this many calls have been recorded. Prevents premature circuit opening
+        # on the very first call.
+        minimum-number-of-calls: 3
+
+        # ── OPEN state wait duration ────────────────────────────────────────────────
+        # How long the circuit stays OPEN before transitioning to HALF_OPEN.
+        # During this time all calls are immediately rejected (not permitted).
+        wait-duration-in-open-state: 10s
+
+        # ── HALF_OPEN state probe ───────────────────────────────────────────────────
+        # Number of probe calls allowed through when transitioning from OPEN to HALF_OPEN.
+        # If these succeed the circuit closes; if they fail it re-opens.
+        permitted-number-of-calls-in-half-open-state: 2
+
+        # ── Automatic transition to HALF_OPEN ───────────────────────────────────────
+        # When true, the circuit automatically transitions to HALF_OPEN after the
+        # wait duration without requiring an incoming call to trigger the transition.
+        automatic-transition-from-open-to-half-open-enabled: true
+
+        # ── Exception recording ─────────────────────────────────────────────────────
+        # By default all exceptions are recorded as failures. You can customise which
+        # exceptions count using record-exceptions and ignore-exceptions lists.
+        # Here we rely on the default (record all) for simplicity.
+
+  # ── Retry configuration ─────────────────────────────────────────────────────────
+  retry:
+    instances:
+      # "inventoryService" must match the name= attribute in @Retry annotations.
+      inventoryService:
+        # Maximum number of attempts (including the first call).
+        # With 2 retries, a failing call is attempted 3 times total before
+        # the circuit breaker counts it as a single failure.
+        max-attempts: 3
+        # Fixed wait between retry attempts. Use exponential-backoff-multiplier
+        # for production to avoid thundering herd on a recovering service.
+        wait-duration: 500ms
+        # Only retry on these exception types. ResourceAccessException covers
+        # connection refusals and timeouts from RestTemplate.
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+
+# ── Spring Boot Actuator ────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expose health, info, metrics, circuitbreakers, and prometheus endpoints.
+        include: health,info,metrics,circuitbreakers,circuitbreakerevents,prometheus
+  endpoint:
+    health:
+      # Show full health details including circuit breaker states.
+      show-details: always
+  health:
+    circuitbreakers:
+      # Include Resilience4j circuit breaker states in the /actuator/health response.
+      enabled: true
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.example.circuitbreaker: DEBUG
+    # Log Resilience4j state transitions (CLOSED→OPEN, etc.) at DEBUG level
+    io.github.resilience4j: DEBUG

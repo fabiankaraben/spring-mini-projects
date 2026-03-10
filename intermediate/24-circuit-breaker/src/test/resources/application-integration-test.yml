@@ -1,0 +1,36 @@
+# ── Integration test profile configuration ───────────────────────────────────────
+# Activated via @ActiveProfiles("integration-test") in ProductControllerIntegrationTest.
+# The actual inventory.base-url is overridden at runtime by @DynamicPropertySource
+# with the WireMock server URL — no static URL is needed here.
+
+# ── Resilience4j tuning for integration tests ─────────────────────────────────────
+# Use a smaller sliding window and fewer minimum calls so the circuit breaker
+# responds quickly during tests without needing many repeated requests.
+resilience4j:
+  circuitbreaker:
+    instances:
+      inventoryService:
+        # 3-call window lets the circuit open after just 2 failures (≥50% of 3+ calls)
+        sliding-window-size: 3
+        minimum-number-of-calls: 2
+        # Very short open duration so HALF_OPEN probes happen quickly in tests
+        wait-duration-in-open-state: 1s
+        failure-rate-threshold: 50
+        permitted-number-of-calls-in-half-open-state: 1
+        automatic-transition-from-open-to-half-open-enabled: true
+  retry:
+    instances:
+      inventoryService:
+        # Keep 3 attempts but shorten wait time so tests run faster
+        max-attempts: 3
+        wait-duration: 100ms
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+
+# ── Logging: reduce noise during integration test runs ────────────────────────────
+logging:
+  level:
+    root: WARN
+    com.example.circuitbreaker: INFO
+    io.github.resilience4j: INFO
