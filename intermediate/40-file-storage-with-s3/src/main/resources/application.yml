@@ -1,0 +1,47 @@
+server:
+  port: 8080
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Spring multipart configuration
+# ─────────────────────────────────────────────────────────────────────────────
+spring:
+  servlet:
+    multipart:
+      # Maximum size of a single uploaded file (adjust as needed)
+      max-file-size: 50MB
+      # Maximum size of the entire multipart request
+      max-request-size: 50MB
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Application-specific S3 / MinIO settings
+# ─────────────────────────────────────────────────────────────────────────────
+app:
+  s3:
+    # Endpoint URL for S3-compatible storage.
+    # For local development with MinIO via Docker Compose: http://localhost:9000
+    # For production AWS S3: use a real AWS endpoint or leave it as-is and
+    # override the endpoint via the AWS_ENDPOINT_URL environment variable.
+    endpoint-url: http://localhost:9000
+
+    # AWS region – required by the SDK even for MinIO (MinIO ignores it)
+    region: us-east-1
+
+    # MinIO root credentials (defined in docker-compose.yml)
+    # In production, inject these from environment variables or a secrets manager
+    access-key: minioadmin
+    secret-key: minioadmin
+
+    # Name of the bucket where files will be stored
+    bucket-name: file-storage-bucket
+
+    # Path-style access is required for MinIO.
+    # For AWS S3, set this to false to use virtual-hosted-style URLs.
+    path-style-access: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Logging
+# ─────────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.example.filestorage: DEBUG
+    software.amazon.awssdk: WARN
