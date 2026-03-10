@@ -1,0 +1,81 @@
+spring:
+  application:
+    name: spring-batch-schedulers
+
+  # ── DataSource ──────────────────────────────────────────────────────────────
+  # These values are used when running locally (outside Docker).
+  # When running via Docker Compose they are overridden by environment variables
+  # set in docker-compose.yml (SPRING_DATASOURCE_URL, etc.).
+  datasource:
+    url: jdbc:postgresql://localhost:5432/batchschedulersdb
+    username: batchschedulers
+    password: batchschedulers
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      # Maximum number of connections kept in the pool
+      maximum-pool-size: 5
+      # Milliseconds before a connection acquisition attempt times out
+      connection-timeout: 30000
+
+  # ── JPA / Hibernate ─────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      # "validate" – Hibernate checks the schema matches entities but does NOT
+      # create or alter tables. Schema is managed exclusively by Flyway.
+      ddl-auto: validate
+    # Set to true temporarily to debug SQL queries; false in normal usage
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # ── Flyway ──────────────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    # Flyway looks for migration scripts in classpath:db/migration by default
+    locations: classpath:db/migration
+    # Allow Flyway to run when the schema already has tables
+    baseline-on-migrate: true
+
+  # ── Spring Batch ────────────────────────────────────────────────────────────
+  batch:
+    job:
+      # Disable automatic job execution on application startup.
+      # Jobs are triggered by the @Scheduled methods in BatchJobScheduler.
+      enabled: false
+    jdbc:
+      # Flyway (V4 migration) creates the Spring Batch meta-data tables.
+      # Setting this to "never" prevents Spring Boot from trying to re-create them.
+      initialize-schema: never
+
+# ── Batch scheduler configuration ────────────────────────────────────────────
+# These cron expressions control when each job fires.
+# Format: second minute hour day-of-month month day-of-week
+# Override via environment variables: BATCH_SCHEDULE_PRICE_REFRESH_CRON, etc.
+batch:
+  schedule:
+    # priceRefreshJob: every 30 seconds
+    price-refresh-cron: "0/30 * * * * *"
+    # inventoryAuditJob: every 60 seconds (on the minute)
+    inventory-audit-cron: "0 * * * * *"
+    # reportGenerationJob: every 2 minutes
+    report-generation-cron: "0 0/2 * * * *"
+  price-refresh:
+    # Factor applied to each product price on every priceRefreshJob run.
+    # 1.02 = 2% increase. Change to 1.00 to keep prices stable.
+    adjustment-factor: "1.02"
+
+# ── Actuator ─────────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.example.batchschedulers: DEBUG
+    org.springframework.batch: INFO
+    org.flywaydb: INFO

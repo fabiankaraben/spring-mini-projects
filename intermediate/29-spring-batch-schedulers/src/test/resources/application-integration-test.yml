@@ -1,0 +1,48 @@
+# ── Integration-test Spring profile ──────────────────────────────────────────
+# Activated via @ActiveProfiles("integration-test") on integration test classes.
+# Overrides the default application.yml with settings suited for Testcontainers.
+# The actual JDBC URL/credentials are injected at runtime by @DynamicPropertySource.
+
+spring:
+  # ── Flyway ──────────────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  # ── JPA ─────────────────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      # "validate" – Flyway manages the schema; Hibernate checks it matches entities
+      ddl-auto: validate
+    show-sql: false
+
+  # ── Spring Batch ────────────────────────────────────────────────────────────
+  batch:
+    job:
+      # Keep auto-execution disabled; integration tests launch jobs manually
+      enabled: false
+    jdbc:
+      # Flyway (V4 migration) creates the Spring Batch tables
+      initialize-schema: never
+
+# ── Batch scheduler configuration (test overrides) ──────────────────────────
+# Disable the schedulers during integration tests to prevent background job
+# executions from interfering with the test assertions.
+# The "-" value disables cron triggers (Spring will never fire them).
+batch:
+  schedule:
+    price-refresh-cron: "-"
+    inventory-audit-cron: "-"
+    report-generation-cron: "-"
+  price-refresh:
+    # Use factor 1.00 (no-op) in tests to keep prices stable for assertions
+    adjustment-factor: "1.00"
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.example.batchschedulers: DEBUG
+    org.springframework.batch: INFO
+    org.flywaydb: INFO
+    org.testcontainers: WARN

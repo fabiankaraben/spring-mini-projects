@@ -1,0 +1,70 @@
+services:
+  # ── PostgreSQL – application database ────────────────────────────────────────
+  # Stores all application tables (products, job_audit_logs, product_reports)
+  # and the Spring Batch meta-data tables (BATCH_JOB_INSTANCE, etc.).
+  # Flyway runs on application startup and applies V1–V4 migration scripts.
+  postgres:
+    image: postgres:16-alpine
+    container_name: batch-schedulers-postgres
+    ports:
+      # Expose port 5432 on the host so you can inspect data with psql or a GUI tool:
+      # psql -h localhost -p 5432 -U batchschedulers -d batchschedulersdb
+      - "5432:5432"
+    environment:
+      # Database credentials – must match SPRING_DATASOURCE_* in the app service below
+      POSTGRES_DB: batchschedulersdb
+      POSTGRES_USER: batchschedulers
+      POSTGRES_PASSWORD: batchschedulers
+    volumes:
+      # Named volume persists database data across container restarts.
+      # Remove it to start fresh: docker volume rm 29-spring-batch-schedulers_pgdata
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready exits 0 when PostgreSQL is ready to accept connections.
+      # The app service waits for this check to pass before starting.
+      test: ["CMD-SHELL", "pg_isready -U batchschedulers -d batchschedulersdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Spring Boot application ───────────────────────────────────────────────────
+  # The Spring Batch Schedulers application. Runs three batch jobs on cron
+  # schedules and exposes a REST API on port 8080.
+  app:
+    build: .
+    container_name: batch-schedulers-app
+    ports:
+      # Access the REST API at: http://localhost:8080/api/batch
+      - "8080:8080"
+    environment:
+      # ── DataSource – uses the postgres service name as the hostname ──────────
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/batchschedulersdb
+      SPRING_DATASOURCE_USERNAME: batchschedulers
+      SPRING_DATASOURCE_PASSWORD: batchschedulers
+      # ── JPA ─────────────────────────────────────────────────────────────────
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      # ── Spring Batch ─────────────────────────────────────────────────────────
+      # Flyway creates the Spring Batch tables – tell Spring Batch not to re-init
+      SPRING_BATCH_JDBC_INITIALIZE_SCHEMA: never
+      # Disable Spring Boot auto-run; jobs are triggered by @Scheduled methods
+      SPRING_BATCH_JOB_ENABLED: "false"
+      # ── Scheduler cron configuration ─────────────────────────────────────────
+      # Override default cron expressions here if you want different frequencies.
+      # Format: second minute hour day-of-month month day-of-week
+      # BATCH_SCHEDULE_PRICE_REFRESH_CRON: "0/30 * * * * *"     # every 30s
+      # BATCH_SCHEDULE_INVENTORY_AUDIT_CRON: "0 * * * * *"       # every 1 min
+      # BATCH_SCHEDULE_REPORT_GENERATION_CRON: "0 0/2 * * * *"   # every 2 min
+      # ── Price refresh adjustment factor ──────────────────────────────────────
+      # 1.02 = 2% price increase on every priceRefreshJob run.
+      # Change to 1.00 to disable price changes.
+      BATCH_PRICE_REFRESH_ADJUSTMENT_FACTOR: "1.02"
+    depends_on:
+      postgres:
+        # Wait for the PostgreSQL healthcheck to pass before starting the app
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  # Named volume for PostgreSQL data persistence
+  pgdata:
