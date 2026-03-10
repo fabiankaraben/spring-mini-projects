@@ -1,0 +1,21 @@
+services:
+  # ── Spring Boot application ────────────────────────────────────────────────────
+  # The Retry and Rate Limiting application. It calls an external upstream weather
+  # API whose base URL is configured via the WEATHER_BASE_URL environment variable.
+  #
+  # This project has no database or message broker. The only container required
+  # is the application itself. Point WEATHER_BASE_URL at a real or mock weather service.
+  app:
+    build: .
+    container_name: retry-rate-limiting-app
+    ports:
+      # Map host port 8080 to the container's port 8080 (Spring Boot default).
+      # Access the API at: http://localhost:8080
+      - "8080:8080"
+    environment:
+      # Base URL of the upstream weather API that the Retry and RateLimiter protect.
+      # Replace this with the URL of your real weather service.
+      # When not set, the default from application.yml is used: http://localhost:9090
+      - WEATHER_BASE_URL=${WEATHER_BASE_URL:-http://localhost:9090}
+    # Restart the container automatically if it crashes (useful in production)
+    restart: unless-stopped

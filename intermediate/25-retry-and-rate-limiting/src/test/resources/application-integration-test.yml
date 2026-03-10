@@ -1,0 +1,37 @@
+# ── Integration test profile configuration ───────────────────────────────────────
+# Activated via @ActiveProfiles("integration-test") in WeatherControllerIntegrationTest.
+# The actual weather.base-url is overridden at runtime by @DynamicPropertySource
+# with the WireMock server URL — no static URL is needed here.
+
+# ── Resilience4j tuning for integration tests ─────────────────────────────────────
+resilience4j:
+
+  # ── Retry tuning ────────────────────────────────────────────────────────────────
+  retry:
+    instances:
+      weatherService:
+        # Keep 3 attempts but shorten wait time so tests run faster
+        max-attempts: 3
+        wait-duration: 100ms
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+
+  # ── RateLimiter tuning ───────────────────────────────────────────────────────────
+  ratelimiter:
+    instances:
+      weatherService:
+        # Very tight rate limit so the rate-limit exhaustion test can trigger it
+        # with just 2 + 1 calls (2 permits allowed, then 3rd is rejected).
+        limit-for-period: 2
+        # Long refresh period so the 3rd call in the test is still within the window
+        limit-refresh-period: 60s
+        # 0 = reject immediately when no permit is available (non-blocking)
+        timeout-duration: 0
+
+# ── Logging: reduce noise during integration test runs ────────────────────────────
+logging:
+  level:
+    root: WARN
+    com.example.retryratelimiting: INFO
+    io.github.resilience4j: INFO

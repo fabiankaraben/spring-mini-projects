@@ -1,0 +1,97 @@
+spring:
+  # ── Application name ────────────────────────────────────────────────────────────
+  application:
+    name: retry-and-rate-limiting
+
+  # ── Jackson JSON serialisation ───────────────────────────────────────────────────
+  # Do not serialise properties whose value is null. Keeps responses clean and avoids
+  # exposing null temperature/humidity fields in the fallback response.
+  jackson:
+    default-property-inclusion: non_null
+
+# ── Server ──────────────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Upstream weather API ────────────────────────────────────────────────────────────
+# Base URL for the external weather service that this application calls.
+# Override with the WEATHER_BASE_URL environment variable (e.g., in Docker Compose
+# or when running integration tests against a WireMock instance).
+weather:
+  base-url: ${WEATHER_BASE_URL:http://localhost:9090}
+
+# ── Resilience4j configuration ──────────────────────────────────────────────────────
+resilience4j:
+
+  # ── Retry configuration ─────────────────────────────────────────────────────────
+  retry:
+    instances:
+      # "weatherService" must match the name= attribute in @Retry annotations
+      # and the INSTANCE_NAME constant in WeatherService.
+      weatherService:
+        # Maximum number of attempts including the first call.
+        # With max-attempts=3, a failing call is attempted 3 times total before
+        # the exception propagates to the fallback method.
+        max-attempts: 3
+
+        # Wait duration between retry attempts.
+        # Using a fixed 500 ms wait keeps the demo simple. In production, consider
+        # exponential back-off to avoid thundering-herd on a recovering service:
+        #   exponential-backoff-multiplier: 2
+        #   exponential-max-wait-duration: 10s
+        wait-duration: 500ms
+
+        # Only retry on these specific exception types.
+        # - ResourceAccessException: covers connection refused, read timeouts (I/O errors)
+        # - HttpServerErrorException: covers 5xx responses from the upstream service
+        # We intentionally do NOT retry on HttpClientErrorException (4xx) since those
+        # indicate a client-side error (bad request) that retrying won't fix.
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+
+  # ── Rate Limiter configuration ───────────────────────────────────────────────────
+  ratelimiter:
+    instances:
+      # "weatherService" must match the name= attribute in @RateLimiter annotations
+      # and the INSTANCE_NAME constant in WeatherService.
+      weatherService:
+        # ── Permit budget ──────────────────────────────────────────────────────────
+        # Maximum number of calls allowed within one refresh period.
+        # Here: 10 calls per 10 seconds = 1 call/sec on average.
+        # Adjust this to match the rate limits imposed by your real upstream API.
+        limit-for-period: 10
+
+        # Duration of the sliding window after which the permit count resets.
+        # Together with limit-for-period this defines the rate: 10 calls / 10s.
+        limit-refresh-period: 10s
+
+        # ── Call queuing timeout ───────────────────────────────────────────────────
+        # How long a call waits for an available permit before being rejected.
+        # With timeout-duration=0, calls are rejected immediately when no permit
+        # is available (non-blocking behaviour). Increase this (e.g., 500ms) to
+        # queue short bursts and smooth out traffic spikes.
+        timeout-duration: 0
+
+# ── Spring Boot Actuator ────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expose health, info, metrics, retry events, rate limiter info, and prometheus.
+        include: health,info,metrics,retries,retryevents,ratelimiters,ratelimiterevents,prometheus
+  endpoint:
+    health:
+      # Show full health details including Resilience4j component states.
+      show-details: always
+  health:
+    ratelimiters:
+      # Include RateLimiter health in the /actuator/health response.
+      enabled: true
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.example.retryratelimiting: DEBUG
+    # Log Resilience4j retry and rate limiter events at DEBUG level
+    io.github.resilience4j: DEBUG
