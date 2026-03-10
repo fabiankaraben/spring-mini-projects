@@ -1,0 +1,20 @@
+services:
+  # ── Spring Boot application ───────────────────────────────────────────────────
+  # This project has no database or message broker — it only makes outbound HTTP
+  # calls via OpenFeign to the JSONPlaceholder public REST API. The only container
+  # needed is the application itself.
+  app:
+    build: .
+    container_name: feign-client-integration-app
+    ports:
+      # Map host port 8080 to the container's port 8080 (Spring Boot default).
+      # Access the API at: http://localhost:8080
+      - "8080:8080"
+    environment:
+      # Override the upstream API base URL if you want to point Feign at a
+      # different server (e.g., a local WireMock instance for manual testing).
+      # When not set, the default from application.yml is used:
+      #   https://jsonplaceholder.typicode.com
+      - JSONPLACEHOLDER_BASE_URL=${JSONPLACEHOLDER_BASE_URL:-https://jsonplaceholder.typicode.com}
+    # Restart the container automatically if it crashes (useful in production)
+    restart: unless-stopped

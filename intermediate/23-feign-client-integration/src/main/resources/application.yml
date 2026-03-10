@@ -1,0 +1,51 @@
+spring:
+  # ── Application name ────────────────────────────────────────────────────────────
+  application:
+    name: feign-client-integration
+
+  # ── Jackson JSON serialisation ───────────────────────────────────────────────────
+  # Do not serialise properties whose value is null. This keeps responses clean
+  # when optional fields are absent (e.g., the Post.id is null on creation).
+  jackson:
+    default-property-inclusion: non_null
+
+# ── Server ──────────────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── OpenFeign configuration ──────────────────────────────────────────────────────────
+# The base URL for the JSONPlaceholder API. This is injected into the
+# @FeignClient(url = "${jsonplaceholder.base-url}") annotation.
+# Override this property to point Feign at a different server (e.g., WireMock in tests).
+jsonplaceholder:
+  # The base URL for the upstream API. Override with the JSONPLACEHOLDER_BASE_URL
+  # environment variable (e.g., in Docker Compose or for local WireMock testing).
+  base-url: ${JSONPLACEHOLDER_BASE_URL:https://jsonplaceholder.typicode.com}
+
+# ── Feign client settings ─────────────────────────────────────────────────────────────
+feign:
+  client:
+    config:
+      # "jsonplaceholder" matches the @FeignClient(name = "jsonplaceholder") value.
+      # This block configures the behaviour of that specific Feign client.
+      jsonplaceholder:
+        # Connection timeout: max milliseconds to wait for the TCP connection to be
+        # established with the upstream server. Fail fast if the server is unreachable.
+        connect-timeout: 5000
+        # Read timeout: max milliseconds to wait for data after the connection is open.
+        # JSONPlaceholder is a public API so we allow a generous read timeout.
+        read-timeout: 10000
+        # Log level for Feign client calls. Options:
+        #   NONE    – no logging (default, use in production to avoid PII leakage)
+        #   BASIC   – logs request method, URL, response status, and execution time
+        #   HEADERS – BASIC + request and response headers
+        #   FULL    – HEADERS + request and response body (use only for debugging)
+        logger-level: BASIC
+
+# ── Logging ──────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show Feign HTTP traffic (request/response lines) at DEBUG level
+    com.example.feignclientintegration: DEBUG
+    # Feign itself logs at DEBUG when logger-level is BASIC or above
+    feign: DEBUG

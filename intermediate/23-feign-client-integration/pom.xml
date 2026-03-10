@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.example</groupId>
+	<artifactId>feignclientintegration</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>feignclientintegration</name>
+	<description>Spring Boot mini-project demonstrating declarative HTTP clients using OpenFeign</description>
+	<properties>
+		<java.version>21</java.version>
+		<!-- Spring Cloud BOM version – manages all Spring Cloud module versions consistently -->
+		<spring-cloud.version>2024.0.1</spring-cloud.version>
+		<!-- Testcontainers BOM version – aligns all Testcontainers module versions -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+	<dependencies>
+		<!-- Spring Boot Web – provides the embedded Tomcat server and @RestController
+		     support. Our application exposes its own REST API that delegates calls
+		     to upstream services via Feign clients. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!-- Spring Cloud OpenFeign – turns annotated Java interfaces into HTTP clients.
+		     Instead of writing RestTemplate/WebClient boilerplate, you declare an
+		     interface with @FeignClient and annotate each method with Spring MVC
+		     annotations (@GetMapping, @PostMapping, etc.). Spring Cloud generates
+		     the implementation at startup using a JDK dynamic proxy. -->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-openfeign</artifactId>
+		</dependency>
+
+		<!-- Bean Validation (Hibernate Validator) – @NotBlank, @NotNull, @Min, etc.
+		     on request DTOs. Spring MVC integrates with validation via @Valid. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!-- Spring Boot Test – JUnit 5, AssertJ, Mockito, and MockMvc integration.
+		     Provides the @SpringBootTest, @WebMvcTest, and @MockitoBean annotations
+		     used across all test types in this project. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Testcontainers JUnit 5 integration – @Testcontainers and @Container
+		     annotations for managing Docker container lifecycles during integration tests.
+		     The WireMock container is managed through this infrastructure. -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Testcontainers core – base library for programmatic Docker container
+		     management. Used directly (GenericContainer) to run the WireMock
+		     Docker image for integration tests. -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- WireMock – HTTP mock server. Used in integration tests to simulate the
+		     upstream REST API (JSONPlaceholder) without making real network calls.
+		     WireMock allows stubbing request/response pairs so Feign client behaviour
+		     can be fully tested in isolation with deterministic responses. -->
+		<dependency>
+			<groupId>org.wiremock</groupId>
+			<artifactId>wiremock-standalone</artifactId>
+			<version>3.12.1</version>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<dependencyManagement>
+		<dependencies>
+			<!-- Spring Cloud BOM – manages compatible versions of all Spring Cloud
+			     modules (OpenFeign, LoadBalancer, Gateway, etc.) so that version
+			     conflicts are avoided. The BOM is imported with scope=import/type=pom. -->
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-dependencies</artifactId>
+				<version>${spring-cloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<!-- Import the Testcontainers BOM so all module versions stay in sync -->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin – packages the application as an executable JAR -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<!-- Surefire plugin with JVM args required for Mockito on Java 21+ and
+			     the DOCKER_API_VERSION env var required for Testcontainers on Docker Desktop 29+ -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<!-- Testcontainers uses this to communicate with the Docker daemon.
+						     Docker Desktop 29+ rejects the legacy v1.24 API; 1.44 is required. -->
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+</project>

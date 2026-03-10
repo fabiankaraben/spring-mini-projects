@@ -1,0 +1,11 @@
+# ── Integration test profile configuration ───────────────────────────────────────
+# Activated via @ActiveProfiles("integration-test") in PostControllerIntegrationTest.
+# The actual jsonplaceholder.base-url is overridden at runtime by @DynamicPropertySource
+# with the WireMock container URL — no static URL is needed here.
+
+# ── Logging: reduce noise during integration test runs ────────────────────────────
+logging:
+  level:
+    root: WARN
+    com.example.feignclientintegration: INFO
+    feign: INFO
