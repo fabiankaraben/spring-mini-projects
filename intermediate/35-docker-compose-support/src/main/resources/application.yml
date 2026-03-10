@@ -1,0 +1,60 @@
+spring:
+  application:
+    name: docker-compose-support
+
+  # ---------------------------------------------------------------------------
+  # Spring Boot Docker Compose Support
+  #
+  # When the 'spring-boot-docker-compose' dependency is on the classpath,
+  # Spring Boot automatically detects a compose file in the project root.
+  #
+  # Lifecycle (default = start-and-stop):
+  #   - start-and-stop  : `docker compose up` on app start, `docker compose stop` on shutdown
+  #   - start-only      : starts containers but never stops them
+  #   - none            : disables automatic lifecycle management entirely
+  #
+  # The 'file' property specifies which compose file to use. Here we point to
+  # 'compose.yml' (the dev-only compose file) rather than 'docker-compose.yml'
+  # (which bundles the application itself for production use).
+  #
+  # Spring Boot reads the service labels and connection details from the running
+  # containers (host, mapped port, credentials) and automatically overrides the
+  # matching datasource / connection properties — so you don't need to hard-code
+  # connection strings for local development.
+  # ---------------------------------------------------------------------------
+  docker:
+    compose:
+      # Enable Docker Compose support (this is the default when the dependency is present)
+      enabled: true
+      # Path to the dev compose file relative to the project root
+      file: compose.yml
+      # Lifecycle strategy: start containers on boot, stop them on shutdown
+      lifecycle-management: start-and-stop
+      # If containers are already running (e.g. started manually), skip the
+      # docker compose up step and just reuse them
+      skip:
+        in-tests: true  # Do not start Docker Compose during tests (Testcontainers handles that)
+
+  # ---------------------------------------------------------------------------
+  # JPA / Hibernate configuration
+  # ---------------------------------------------------------------------------
+  jpa:
+    # 'update' — Hibernate adjusts the schema to match the entities on startup.
+    # For production, prefer Flyway or Liquibase for controlled migrations.
+    hibernate:
+      ddl-auto: update
+    # Log the generated SQL statements (helpful for learning)
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        # PostgreSQL dialect — Hibernate auto-detects this, but declaring it
+        # explicitly avoids the auto-detection cost at startup
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+# REST API port
+server:
+  port: 8080
+
+# Enable pretty-printed JSON responses (helpful for learning / debugging)
+spring.jackson.serialization.indent_output: true

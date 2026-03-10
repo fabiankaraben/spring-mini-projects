@@ -1,0 +1,52 @@
+services:
+
+  # PostgreSQL database — production service
+  #
+  # This is the same image used in compose.yml (dev) and Testcontainers (tests),
+  # ensuring environmental parity across all stages.
+  postgres:
+    image: postgres:16-alpine
+    container_name: docker-compose-support-db
+    environment:
+      POSTGRES_DB: booksdb
+      POSTGRES_USER: books_user
+      POSTGRES_PASSWORD: books_pass
+    volumes:
+      # Named volume for data persistence across container restarts.
+      # Without this, all data is lost when the container is recreated.
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Expose PostgreSQL on the host so you can connect with a DB client
+      - "5432:5432"
+    healthcheck:
+      # Wait until PostgreSQL is ready before the app container starts
+      test: ["CMD-SHELL", "pg_isready -U books_user -d booksdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Spring Boot application
+  app:
+    build: .
+    container_name: docker-compose-support-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Override application.yml datasource settings to point to the 'postgres'
+      # service using Docker Compose's internal DNS (service name = hostname).
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/booksdb
+      - SPRING_DATASOURCE_USERNAME=books_user
+      - SPRING_DATASOURCE_PASSWORD=books_pass
+      # Disable Spring Boot's Docker Compose integration inside the container
+      # (it is only needed for local development, not inside Docker itself)
+      - SPRING_DOCKER_COMPOSE_ENABLED=false
+      # Use update DDL strategy so schema is created on first run
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+
+volumes:
+  # Named volume: data persists even when containers are stopped/removed
+  postgres_data:

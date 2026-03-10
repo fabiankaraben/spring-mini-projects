@@ -1,0 +1,50 @@
+# ---------------------------------------------------------------------------
+# Spring Boot Docker Compose Support — Dev Services File
+#
+# This file is used EXCLUSIVELY by Spring Boot's Docker Compose integration
+# (the 'spring-boot-docker-compose' dependency).
+#
+# When you run `./mvnw spring-boot:run` (or start the app from your IDE),
+# Spring Boot detects this file and automatically:
+#   1. Runs `docker compose up` to start the services below.
+#   2. Reads the container's host, port and credentials.
+#   3. Injects them into the application context so the app connects
+#      to this containerised database — no manual config needed.
+#   4. Runs `docker compose stop` when the application shuts down.
+#
+# This is NOT the production compose file. See docker-compose.yml for the
+# full deployment setup (app + database together).
+# ---------------------------------------------------------------------------
+
+services:
+
+  # PostgreSQL database — development service
+  #
+  # Spring Boot's Docker Compose integration understands the standard
+  # PostgreSQL Docker image labels and automatically maps:
+  #   - POSTGRES_DB       → spring.datasource.url  (database name part)
+  #   - POSTGRES_USER     → spring.datasource.username
+  #   - POSTGRES_PASSWORD → spring.datasource.password
+  #
+  # The container is given a name so it can be identified easily in Docker Desktop.
+  postgres:
+    image: postgres:16-alpine
+    container_name: docker-compose-support-dev-db
+    environment:
+      # Database name that Spring Boot will connect to
+      POSTGRES_DB: booksdb
+      # Credentials that Spring Boot will use for the connection
+      POSTGRES_USER: books_user
+      POSTGRES_PASSWORD: books_pass
+    ports:
+      # Expose port 5432 on the host so you can connect with a DB client
+      # (e.g. DBeaver, psql) during development.
+      # Spring Boot uses the mapped host:port, not the container-internal one.
+      - "5432:5432"
+    healthcheck:
+      # Wait until PostgreSQL is ready to accept connections before the app starts
+      test: ["CMD-SHELL", "pg_isready -U books_user -d booksdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
