@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: elasticsearch-crud
+
+  # ── Elasticsearch connection ──────────────────────────────────────────────────
+  elasticsearch:
+    # URI of the Elasticsearch node. In production (Docker Compose), the hostname
+    # "elasticsearch" resolves to the Elasticsearch service inside the Docker network.
+    # Locally (without Docker), point this at your local Elasticsearch instance.
+    uris: ${ELASTICSEARCH_URI:http://localhost:9200}
+    # Username and password for Elasticsearch security (xpack.security).
+    # The official Docker image enables security by default in ES 8.x.
+    username: ${ELASTICSEARCH_USERNAME:elastic}
+    password: ${ELASTICSEARCH_PASSWORD:changeme}
+
+# ── Server configuration ──────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show Elasticsearch client requests and responses for educational visibility
+    org.springframework.data.elasticsearch: INFO
+    tracer: WARN

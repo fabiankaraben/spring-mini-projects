@@ -1,0 +1,66 @@
+services:
+  # ── Elasticsearch ─────────────────────────────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: elasticsearchcrud-elasticsearch
+    ports:
+      # Expose the HTTP REST API port so you can also query Elasticsearch directly:
+      # curl http://localhost:9200/_cluster/health
+      - "9200:9200"
+    environment:
+      # Run as a single-node cluster (no multi-node coordination overhead for dev/demo)
+      - discovery.type=single-node
+      # Disable xpack security (TLS + authentication) for local development convenience.
+      # NEVER disable security in production.
+      - xpack.security.enabled=false
+      # Limit JVM heap to 512 MB to keep the container lightweight for development
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      # Named volume preserves index data across container restarts.
+      # Remove it to start fresh: docker volume rm elasticsearchcrud_es_data
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      # Query the cluster health endpoint; Elasticsearch is ready when status is green or yellow
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ── Kibana (optional) ─────────────────────────────────────────────────────────
+  # Kibana provides a web UI to explore Elasticsearch indices and run queries.
+  # Access it at http://localhost:5601 after the stack starts.
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.3
+    container_name: elasticsearchcrud-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      # Tell Kibana where to find Elasticsearch (uses the Docker Compose service name)
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  # ── Spring Boot application ──────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: elasticsearchcrud-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      elasticsearch:
+        # Wait until Elasticsearch's healthcheck passes before starting the app;
+        # this avoids "connection refused" errors during application startup.
+        condition: service_healthy
+    environment:
+      # Override the Elasticsearch URI so "elasticsearch" resolves to the
+      # Elasticsearch service inside the Docker Compose network.
+      - ELASTICSEARCH_URI=http://elasticsearch:9200
+      # No credentials needed since xpack.security is disabled above
+      - ELASTICSEARCH_USERNAME=
+      - ELASTICSEARCH_PASSWORD=
+
+volumes:
+  # Declare the named volume used by the elasticsearch service
+  es_data:

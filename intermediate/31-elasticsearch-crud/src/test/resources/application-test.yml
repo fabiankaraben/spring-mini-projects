@@ -1,0 +1,11 @@
+spring:
+  # Elasticsearch connection for tests is overridden dynamically by @DynamicPropertySource
+  # in the integration test class, which injects the Testcontainers container URL.
+  # This file exists mainly to reduce log noise during test runs.
+
+# ── Logging – reduce noise during tests ──────────────────────────────────────
+logging:
+  level:
+    root: WARN
+    com.example.elasticsearchcrud: INFO
+    org.springframework.data.elasticsearch: WARN
