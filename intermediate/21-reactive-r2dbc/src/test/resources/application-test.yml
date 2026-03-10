@@ -1,0 +1,27 @@
+# ── Test profile configuration ───────────────────────────────────────────────────
+# This file is activated via @ActiveProfiles("test") in integration test classes.
+# It overrides the settings in application.yml to reduce noise during test runs.
+spring:
+  # ── R2DBC: use H2 in-memory database for fast unit/slice tests ──────────────────
+  # H2 provides an in-memory relational database that supports R2DBC, eliminating
+  # the need for Docker during service-layer slice tests. Testcontainers PostgreSQL
+  # is used for full integration tests instead (see ProductIntegrationTest).
+  r2dbc:
+    url: r2dbc:h2:mem:///testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+
+  # ── Flyway: use H2-compatible JDBC URL for schema migration in slice tests ───────
+  flyway:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    user: sa
+    password:
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+# ── Logging: silence most output during test runs ────────────────────────────────
+logging:
+  level:
+    root: WARN
+    com.example.reactiver2dbc: INFO
+    org.flywaydb: WARN

@@ -1,0 +1,54 @@
+services:
+  # ── PostgreSQL 16 database ───────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: reactiver2dbc-postgres
+    ports:
+      # Expose port 5432 so you can connect with psql or a GUI client:
+      # psql -h localhost -U postgres -d productsdb
+      - "5432:5432"
+    environment:
+      # PostgreSQL superuser credentials and the database to create on first boot.
+      # These values must match the spring.r2dbc and spring.flyway settings
+      # in application.yml (or the env overrides below in the app service).
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: productsdb
+    volumes:
+      # Named volume preserves data across container restarts.
+      # Remove with: docker volume rm reactiver2dbc_postgres_data
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready exits 0 when PostgreSQL is ready to accept connections.
+      # The app service will not start until this check passes.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d productsdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Spring Boot application (Netty reactive server) ───────────────────────────
+  app:
+    build: .
+    container_name: reactiver2dbc-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        # Wait until PostgreSQL's healthcheck passes before starting the app;
+        # this avoids "connection refused" errors during application startup.
+        condition: service_healthy
+    environment:
+      # Override the default localhost values in application.yml so that
+      # "postgres" resolves to the PostgreSQL service inside the Docker Compose
+      # network instead of looking for localhost.
+      # R2DBC connection (reactive runtime)
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=productsdb
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=postgres
+
+volumes:
+  # Declare the named volume used by the postgres service
+  postgres_data:

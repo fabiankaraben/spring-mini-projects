@@ -1,0 +1,12 @@
+# ── Integration test profile configuration ───────────────────────────────────────
+# This file is activated via @ActiveProfiles("integration-test") in
+# ProductIntegrationTest. The actual DB connection details are injected at runtime
+# by @DynamicPropertySource (Testcontainers), so no static URLs are needed here.
+# This profile's main purpose is to reduce log noise during test runs.
+
+# ── Logging: silence most output during integration test runs ─────────────────────
+logging:
+  level:
+    root: WARN
+    com.example.reactiver2dbc: INFO
+    org.flywaydb: INFO

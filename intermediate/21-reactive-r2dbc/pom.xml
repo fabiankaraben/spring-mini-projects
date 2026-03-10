@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.example</groupId>
+	<artifactId>reactiver2dbc</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>reactiver2dbc</name>
+	<description>Spring Boot mini-project demonstrating non-blocking reactive access to a relational database using Spring Data R2DBC and Spring WebFlux</description>
+	<properties>
+		<java.version>21</java.version>
+		<!-- Testcontainers BOM version – aligns all Testcontainers module versions -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+	<dependencies>
+		<!-- Spring WebFlux – reactive, non-blocking web framework based on Project Reactor.
+		     Provides @RestController with Mono<T> and Flux<T> return types.
+		     Uses Netty as the default embedded server instead of the traditional
+		     servlet-based Tomcat. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webflux</artifactId>
+		</dependency>
+
+		<!-- Spring Data R2DBC – provides ReactiveCrudRepository and R2dbcRepository.
+		     R2DBC (Reactive Relational Database Connectivity) is a specification for
+		     non-blocking, asynchronous access to relational databases. All database
+		     calls return Mono<T> or Flux<T> so no thread is ever blocked waiting for
+		     a SQL result. This is the reactive counterpart of Spring Data JPA. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-r2dbc</artifactId>
+		</dependency>
+
+		<!-- PostgreSQL R2DBC driver – the non-blocking JDBC replacement that enables
+		     Project Reactor to communicate with PostgreSQL without blocking threads.
+		     io.r2dbc:r2dbc-postgresql is the reference R2DBC driver for PostgreSQL. -->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>r2dbc-postgresql</artifactId>
+		</dependency>
+
+		<!-- PostgreSQL JDBC driver – required only at runtime for Flyway (which uses
+		     JDBC to apply SQL migrations). The application itself uses R2DBC for all
+		     reactive database access; this JDBC driver never touches the hot path. -->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
+		<!-- Flyway Core – database schema migration tool. On startup, Flyway checks
+		     the migration history table (flyway_schema_history) and applies any
+		     pending SQL scripts from src/main/resources/db/migration/ in version order.
+		     This ensures the schema is always in sync with the application code. -->
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-core</artifactId>
+		</dependency>
+
+		<!-- Flyway PostgreSQL module – required for Flyway 10+ when using PostgreSQL.
+		     Provides the PostgreSQL-specific database support for Flyway migrations. -->
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
+
+		<!-- Bean Validation (Hibernate Validator) – @NotBlank, @Min, @DecimalMin, etc.
+		     on request DTOs. Spring WebFlux integrates with validation via @Valid. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!-- Spring Boot Test – JUnit 5, AssertJ, Mockito, WebTestClient integration.
+		     WebTestClient is the reactive-aware replacement for TestRestTemplate. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Reactor Test – StepVerifier for testing Mono/Flux pipelines step-by-step
+		     without blocking. Essential for verifying reactive stream behaviour. -->
+		<dependency>
+			<groupId>io.projectreactor</groupId>
+			<artifactId>reactor-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Testcontainers JUnit 5 integration – @Testcontainers and @Container annotations
+		     for managing Docker container lifecycles during integration tests. -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Testcontainers PostgreSQL module – spins up a real PostgreSQL container
+		     for integration tests, replacing the need for a locally installed database. -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- R2DBC H2 in-memory driver – lightweight in-memory database for unit tests
+		     that need a real (but fast) reactive database driver without Docker.
+		     Used in service-layer integration slices that need an actual DB connection. -->
+		<dependency>
+			<groupId>io.r2dbc</groupId>
+			<artifactId>r2dbc-h2</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- H2 JDBC driver – required for Flyway to run migrations against H2 in tests.
+		     Flyway uses JDBC (not R2DBC) for applying schema scripts. -->
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<dependencyManagement>
+		<dependencies>
+			<!-- Import the Testcontainers BOM so all module versions stay in sync -->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin – packages the application as an executable JAR -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<!-- Surefire plugin with JVM args required for Mockito on Java 21+ and
+			     the DOCKER_API_VERSION env var required for Testcontainers on Docker Desktop 29+ -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<!-- Testcontainers uses this to communicate with the Docker daemon.
+						     Docker Desktop 29+ rejects the legacy v1.24 API; 1.44 is required. -->
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+</project>

@@ -1,0 +1,55 @@
+spring:
+  # ── Application name ────────────────────────────────────────────────────────────
+  application:
+    name: reactive-r2dbc
+
+  # ── R2DBC (Reactive Relational Database Connectivity) connection ─────────────────
+  # Spring Boot auto-configures a reactive ConnectionFactory using these properties.
+  # R2DBC is the non-blocking, async alternative to JDBC. Queries return Mono/Flux
+  # instead of blocking the calling thread.
+  r2dbc:
+    # Override via environment variables in Docker Compose (see docker-compose.yml).
+    # Format: r2dbc:postgresql://<host>:<port>/<database>
+    url: r2dbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:productsdb}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    pool:
+      # Minimum number of idle connections kept open in the connection pool.
+      # Reduces latency for burst traffic by avoiding connection establishment overhead.
+      initial-size: 5
+      # Maximum number of connections in the pool. Exceeding this causes requests to
+      # queue until a connection becomes available.
+      max-size: 20
+      # Maximum time a connection can be idle before it is evicted from the pool.
+      max-idle-time: 30m
+
+  # ── Flyway (schema migration) ────────────────────────────────────────────────────
+  # Flyway uses a separate JDBC DataSource (not R2DBC) to apply SQL migration scripts.
+  # This is a known design: Flyway is a migration tool that requires synchronous access;
+  # the actual application uses R2DBC for all runtime queries.
+  flyway:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:productsdb}
+    user: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    # Location of migration scripts — classpath:db/migration/ is Flyway's default.
+    # Scripts must follow the naming convention: V<version>__<description>.sql
+    locations: classpath:db/migration
+    # Automatically apply pending migrations on startup. Set to false in production
+    # if migrations should be applied as a separate deployment step.
+    baseline-on-migrate: true
+
+# ── Server ──────────────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show Spring Data R2DBC query activity (SQL statements issued to PostgreSQL)
+    org.springframework.data.r2dbc: DEBUG
+    # Show our application's own log output at DEBUG level
+    com.example.reactiver2dbc: DEBUG
+    # Reduce Netty event-loop noise (set to DEBUG for connection-level troubleshooting)
+    reactor.netty: INFO
+    # Flyway migration output
+    org.flywaydb: INFO
