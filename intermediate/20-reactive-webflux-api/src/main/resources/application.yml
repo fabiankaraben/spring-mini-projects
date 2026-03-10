@@ -1,0 +1,34 @@
+spring:
+  # ── Application name ────────────────────────────────────────────────────────────
+  application:
+    name: reactive-webflux-api
+
+  # ── MongoDB Reactive connection ──────────────────────────────────────────────────
+  # Spring Boot auto-configures a ReactiveMongoClient using these properties.
+  # When running locally (outside Docker) ensure a MongoDB server is running on
+  # localhost:27017, or use `docker compose up` to start one automatically.
+  data:
+    mongodb:
+      # Override via environment variables in Docker Compose (see docker-compose.yml).
+      # Format: mongodb://<host>:<port>/<database>
+      host: ${MONGODB_HOST:localhost}
+      port: ${MONGODB_PORT:27017}
+      database: ${MONGODB_DATABASE:articledb}
+      # Uncomment and set for authenticated MongoDB deployments:
+      # username: ${MONGODB_USERNAME:}
+      # password: ${MONGODB_PASSWORD:}
+      # authentication-database: admin
+
+# ── Server ──────────────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show Spring Data MongoDB reactive query activity
+    org.springframework.data.mongodb: DEBUG
+    # Show our application's own log output at DEBUG level
+    com.example.reactivewebfluxapi: DEBUG
+    # Show Netty reactor-netty event loop info (optional, set to WARN to reduce noise)
+    reactor.netty: INFO

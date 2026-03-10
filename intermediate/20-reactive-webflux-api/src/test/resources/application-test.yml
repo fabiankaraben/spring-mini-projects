@@ -1,0 +1,18 @@
+spring:
+  # ── MongoDB Reactive connection ──────────────────────────────────────────────────
+  # The URI is overridden at runtime by @DynamicPropertySource in the integration
+  # test class. Testcontainers assigns a random host port to the MongoDB container,
+  # so we cannot hard-code values here. These placeholders are overridden at runtime.
+  data:
+    mongodb:
+      host: localhost
+      port: 27017
+      database: testdb
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Reduce noise in test output; keep at WARN unless debugging MongoDB behaviour
+    org.springframework.data.mongodb: WARN
+    com.example.reactivewebfluxapi: INFO
+    reactor.netty: WARN

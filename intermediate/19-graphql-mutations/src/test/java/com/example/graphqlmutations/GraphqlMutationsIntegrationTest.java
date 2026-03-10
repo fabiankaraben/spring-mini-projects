@@ -61,6 +61,7 @@ class GraphqlMutationsIntegrationTest {
      * of starting/stopping PostgreSQL for each individual test method.
      */
     @Container
+    @SuppressWarnings("resource")
     static final PostgreSQLContainer<?> POSTGRES =
             new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
                     .withDatabaseName("testdb")

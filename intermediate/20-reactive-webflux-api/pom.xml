@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.example</groupId>
+	<artifactId>reactivewebfluxapi</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>reactivewebfluxapi</name>
+	<description>Spring Boot mini-project demonstrating non-blocking reactive endpoints with Spring WebFlux and Mono/Flux backed by MongoDB reactive driver</description>
+	<properties>
+		<java.version>21</java.version>
+		<!-- Testcontainers BOM version – aligns all Testcontainers module versions -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+	<dependencies>
+		<!-- Spring WebFlux – reactive, non-blocking web framework based on Project Reactor.
+		     Replaces the traditional Spring MVC (servlet-based) stack. Provides:
+		       - RouterFunction / HandlerFunction for functional-style routing
+		       - @RestController with Mono<T> and Flux<T> return types
+		       - Netty as the default embedded server (no servlet container needed) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webflux</artifactId>
+		</dependency>
+
+		<!-- Spring Data MongoDB Reactive – provides ReactiveMongoRepository and
+		     ReactiveMongoTemplate. All database calls return Mono<T> or Flux<T>
+		     so the application never blocks a thread waiting for I/O. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-mongodb-reactive</artifactId>
+		</dependency>
+
+		<!-- Bean Validation (Hibernate Validator) – @NotBlank, @Min, @DecimalMin, etc.
+		     on request DTOs. Spring WebFlux integrates with validation via
+		     @Validated on controllers or explicit Validator calls. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!-- Spring Boot Test – JUnit 5, AssertJ, Mockito, WebTestClient integration.
+		     WebTestClient is the reactive-aware replacement for TestRestTemplate. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Reactor Test – StepVerifier for testing Mono/Flux pipelines step by step
+		     without blocking. Essential for unit-testing reactive streams. -->
+		<dependency>
+			<groupId>io.projectreactor</groupId>
+			<artifactId>reactor-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Testcontainers JUnit 5 integration – @Testcontainers, @Container annotations -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Testcontainers MongoDB module – spins up a real MongoDB container for tests -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>mongodb</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<dependencyManagement>
+		<dependencies>
+			<!-- Import the Testcontainers BOM so all module versions stay in sync -->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin – packages the application as an executable JAR -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<!-- Surefire plugin with JVM args required for Mockito on Java 21+ and
+			     the DOCKER_API_VERSION env var required for Testcontainers on Docker Desktop 29+ -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<!-- Testcontainers uses this to communicate with the Docker daemon.
+						     Docker Desktop 29+ rejects the legacy v1.24 API; 1.44 is required. -->
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+</project>
