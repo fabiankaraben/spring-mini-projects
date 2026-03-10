@@ -1,0 +1,49 @@
+spring:
+  # ── Application name ────────────────────────────────────────────────────────────
+  application:
+    name: activemq-jms
+
+  # ── ActiveMQ Classic connection ───────────────────────────────────────────────────
+  # Spring Boot auto-configures a CachingConnectionFactory (ActiveMQConnectionFactory)
+  # using these properties when spring-boot-starter-activemq is on the classpath.
+  # When running locally (outside Docker) ensure ActiveMQ is running on localhost:61616,
+  # or use `docker compose up` to start one automatically.
+  activemq:
+    # Override via environment variables in Docker Compose.
+    # Format: tcp://host:port
+    broker-url: ${ACTIVEMQ_BROKER_URL:tcp://localhost:61616}
+    user: ${ACTIVEMQ_USER:admin}
+    password: ${ACTIVEMQ_PASSWORD:admin}
+    # Use a pooled connection for better performance under concurrent load.
+    # The pool keeps connections open and reuses them across JmsTemplate calls.
+    pool:
+      enabled: false
+
+  # ── JMS configuration ─────────────────────────────────────────────────────────────
+  jms:
+    # pub-sub-domain = false means we use Queues (point-to-point), not Topics (pub-sub).
+    # This must be false for @JmsListener to listen on a Queue.
+    pub-sub-domain: false
+
+# ── Application-specific JMS destination names ────────────────────────────────────
+# These are custom properties (not standard Spring Boot properties).
+# They are read by @Value annotations in the service and listener classes.
+app:
+  jms:
+    # The JMS queue name where order messages are sent by the producer
+    # and received by the consumer.
+    orders-queue: orders.queue
+
+# ── Server ──────────────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show Spring JMS connection and session activity
+    org.springframework.jms: DEBUG
+    # Show ActiveMQ transport-level activity
+    org.apache.activemq: INFO
+    # Show our application's own log output at DEBUG level
+    com.example.activemqjms: DEBUG

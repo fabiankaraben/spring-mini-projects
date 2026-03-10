@@ -1,0 +1,49 @@
+services:
+  # ── Apache ActiveMQ Classic message broker ─────────────────────────────────────
+  activemq:
+    image: apache/activemq-classic:5.18.3
+    container_name: activemqjms-activemq
+    ports:
+      # OpenWire TCP port – Spring Boot connects here via ActiveMQConnectionFactory
+      - "61616:61616"
+      # ActiveMQ Web Console – open http://localhost:8161 in your browser
+      # Default credentials: admin / admin
+      - "8161:8161"
+    environment:
+      # Default username and password for the ActiveMQ broker.
+      # Change these in production and use Docker secrets or a secrets manager.
+      ACTIVEMQ_CONNECTION_USER: admin
+      ACTIVEMQ_CONNECTION_PASSWORD: admin
+    volumes:
+      # Named volume preserves queue state and messages across container restarts.
+      # Remove it (docker volume rm activemqjms_activemq_data) to start fresh.
+      - activemq_data:/var/lib/activemq/data
+    healthcheck:
+      # ActiveMQ exposes a REST endpoint at /api/brokers; HTTP 200 means broker is ready.
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8161/api/brokers || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  # ── Spring Boot application ────────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: activemqjms-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      activemq:
+        # Wait until ActiveMQ's healthcheck passes before starting the app;
+        # this avoids "connection refused" errors during application startup.
+        condition: service_healthy
+    environment:
+      # Override ActiveMQ connection settings so "activemq" resolves to the
+      # broker service inside the Docker Compose network instead of localhost.
+      - ACTIVEMQ_BROKER_URL=tcp://activemq:61616
+      - ACTIVEMQ_USER=admin
+      - ACTIVEMQ_PASSWORD=admin
+
+volumes:
+  # Declare the named volume used by the activemq service
+  activemq_data:

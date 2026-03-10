@@ -1,0 +1,29 @@
+spring:
+  # ── ActiveMQ connection ────────────────────────────────────────────────────────────
+  # These values are overridden at runtime by @DynamicPropertySource in the
+  # integration test class. Testcontainers assigns a random host port to the
+  # ActiveMQ container, so we cannot hard-code the port here.
+  # The placeholders below act as sensible defaults if no override is provided.
+  activemq:
+    broker-url: tcp://localhost:61616
+    user: admin
+    password: admin
+    pool:
+      enabled: false
+
+  jms:
+    # Use Queues (point-to-point), not Topics (pub-sub)
+    pub-sub-domain: false
+
+# ── Application-specific JMS destination names ────────────────────────────────────
+app:
+  jms:
+    orders-queue: orders.queue
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Reduce noise in test output; keep at WARN unless debugging JMS behaviour
+    org.springframework.jms: WARN
+    org.apache.activemq: WARN
+    com.example.activemqjms: INFO
