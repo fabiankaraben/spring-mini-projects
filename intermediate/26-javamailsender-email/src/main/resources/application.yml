@@ -1,0 +1,70 @@
+spring:
+  # ── Application name ────────────────────────────────────────────────────────────
+  application:
+    name: javamailsender-email
+
+  # ── Jackson JSON serialisation ───────────────────────────────────────────────────
+  # Do not serialise properties whose value is null. Keeps responses clean.
+  jackson:
+    default-property-inclusion: non_null
+
+  # ── JavaMailSender / Spring Mail configuration ───────────────────────────────────
+  # These properties are auto-consumed by Spring Boot's MailSenderAutoConfiguration,
+  # which creates a JavaMailSender bean backed by a Jakarta Mail Session.
+  #
+  # In production (or via Docker Compose) override with environment variables:
+  #   SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD
+  #
+  # In the Docker Compose setup, Mailpit acts as the SMTP server on port 1025.
+  mail:
+    # SMTP host – overrideable via SPRING_MAIL_HOST environment variable
+    host: ${SPRING_MAIL_HOST:localhost}
+    # SMTP port – Mailpit listens on 1025 (standard SMTP = 25, 465 TLS, 587 STARTTLS)
+    port: ${SPRING_MAIL_PORT:1025}
+    # SMTP username – empty for Mailpit (no auth required)
+    username: ${SPRING_MAIL_USERNAME:}
+    # SMTP password – empty for Mailpit (no auth required)
+    password: ${SPRING_MAIL_PASSWORD:}
+    # Jakarta Mail session properties
+    properties:
+      mail:
+        smtp:
+          # SMTP connection timeout in milliseconds (5 seconds)
+          connectiontimeout: 5000
+          # SMTP read/write timeout in milliseconds (5 seconds)
+          timeout: 5000
+          # SMTP write timeout in milliseconds (5 seconds)
+          writetimeout: 5000
+          # Disable STARTTLS for local dev / Mailpit (no TLS support on port 1025)
+          # Set to true when connecting to a real SMTP server that requires STARTTLS
+          starttls:
+            enable: false
+
+# ── Server ──────────────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Application-level mail settings ────────────────────────────────────────────────
+# Custom properties consumed by @Value in EmailServiceImpl.
+app:
+  mail:
+    # The "From" address shown on all outgoing emails.
+    # Override via APP_MAIL_FROM environment variable.
+    from: ${APP_MAIL_FROM:noreply@example.com}
+
+# ── Spring Boot Actuator ────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# ── Logging ─────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.example.javamailsender: DEBUG
+    # Log Spring Mail activity at DEBUG level (useful for diagnosing SMTP issues)
+    org.springframework.mail: DEBUG

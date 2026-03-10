@@ -1,0 +1,50 @@
+services:
+  # ── Mailpit – SMTP test server ───────────────────────────────────────────────────
+  # Mailpit is a lightweight email testing tool that acts as an SMTP sink:
+  # it accepts all incoming emails but never delivers them to real recipients.
+  # It exposes a web UI at http://localhost:8025 where you can browse and
+  # inspect every email received by the application.
+  #
+  # Docker Hub: https://hub.docker.com/r/axllent/mailpit
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: javamailsender-mailpit
+    ports:
+      # SMTP port – the Spring Boot application sends emails here.
+      # Access via: smtp://localhost:1025
+      - "1025:1025"
+      # HTTP web UI + REST API port – browse received emails in a browser.
+      # Access the inbox at: http://localhost:8025
+      - "8025:8025"
+    environment:
+      # Disable Mailpit's authentication for local development (no login required)
+      MP_MAX_MESSAGES: 500
+    restart: unless-stopped
+
+  # ── Spring Boot application ──────────────────────────────────────────────────────
+  # The JavaMailSender Email application. It is configured to connect to the
+  # Mailpit container above as its SMTP server via Docker's internal network.
+  app:
+    build: .
+    container_name: javamailsender-app
+    ports:
+      # Map host port 8080 to the container's port 8080 (Spring Boot default).
+      # Access the API at: http://localhost:8080
+      - "8080:8080"
+    environment:
+      # ── Spring Mail configuration ──────────────────────────────────────────────
+      # Point the application at the Mailpit SMTP container.
+      # Docker Compose service names act as DNS hostnames within the compose network,
+      # so "mailpit" resolves to the Mailpit container's IP address.
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: 1025
+      # No SMTP authentication required for Mailpit
+      SPRING_MAIL_USERNAME: ""
+      SPRING_MAIL_PASSWORD: ""
+      # ── Application mail settings ──────────────────────────────────────────────
+      # The "From" address shown on all outgoing emails
+      APP_MAIL_FROM: noreply@example.com
+    depends_on:
+      # Ensure Mailpit is started before the application attempts to connect
+      - mailpit
+    restart: unless-stopped

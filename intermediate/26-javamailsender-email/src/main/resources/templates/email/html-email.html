@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<!--
+  Thymeleaf HTML email template.
+
+  This template is processed by the Thymeleaf TemplateEngine in EmailServiceImpl.
+  The following variables are injected from the Java code via a Thymeleaf Context:
+    - ${recipientName}  : the recipient's display name (e.g., "John")
+    - ${message}        : the main body text of the email
+
+  Inline CSS is used intentionally because many email clients (Gmail, Outlook)
+  strip <style> tags in <head>. Inline styles have the broadest email client support.
+-->
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Subject is set programmatically in MimeMessageHelper; this title is informational only -->
+    <title>Email Notification</title>
+</head>
+<body style="
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 16px;
+    color: #333333;
+">
+
+<!-- ── Outer wrapper ─────────────────────────────────────────────────────────── -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="background-color: #f4f4f4; padding: 30px 0;">
+    <tr>
+        <td align="center">
+
+            <!-- ── Email card ──────────────────────────────────────────────────── -->
+            <table width="600" cellpadding="0" cellspacing="0" border="0"
+                   style="
+                       background-color: #ffffff;
+                       border-radius: 8px;
+                       overflow: hidden;
+                       box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+                   ">
+
+                <!-- ── Header ───────────────────────────────────────────────────── -->
+                <tr>
+                    <td style="
+                        background-color: #4a90d9;
+                        padding: 28px 40px;
+                        text-align: center;
+                    ">
+                        <h1 style="
+                            margin: 0;
+                            color: #ffffff;
+                            font-size: 24px;
+                            font-weight: bold;
+                            letter-spacing: 1px;
+                        ">Spring Mail Demo</h1>
+                    </td>
+                </tr>
+
+                <!-- ── Body ─────────────────────────────────────────────────────── -->
+                <tr>
+                    <td style="padding: 40px;">
+
+                        <!-- Personalised greeting – th:text replaces the placeholder text -->
+                        <p style="margin: 0 0 20px 0; font-size: 18px; font-weight: bold;">
+                            Dear <span th:text="${recipientName}">Recipient</span>,
+                        </p>
+
+                        <!-- Main message – th:text sets the content from the Java context variable -->
+                        <p style="margin: 0 0 20px 0; line-height: 1.7; color: #555555;"
+                           th:text="${message}">
+                            This is the default message text that Thymeleaf will replace at runtime.
+                        </p>
+
+                        <!-- Decorative separator -->
+                        <hr style="
+                            border: none;
+                            border-top: 1px solid #e8e8e8;
+                            margin: 30px 0;
+                        " />
+
+                        <!-- Informational note about this project -->
+                        <p style="margin: 0; font-size: 13px; color: #aaaaaa; line-height: 1.6;">
+                            This email was sent by the
+                            <strong>JavaMailSender Email</strong> Spring Boot mini-project,
+                            demonstrating HTML email delivery via
+                            <code>JavaMailSender</code> and Thymeleaf templating.
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- ── Footer ───────────────────────────────────────────────────── -->
+                <tr>
+                    <td style="
+                        background-color: #f9f9f9;
+                        padding: 20px 40px;
+                        text-align: center;
+                        border-top: 1px solid #e8e8e8;
+                    ">
+                        <p style="margin: 0; font-size: 12px; color: #aaaaaa;">
+                            © 2025 Spring Mini-Projects · This is a demo email
+                        </p>
+                    </td>
+                </tr>
+
+            </table>
+            <!-- ── /Email card ─────────────────────────────────────────────────── -->
+
+        </td>
+    </tr>
+</table>
+<!-- ── /Outer wrapper ────────────────────────────────────────────────────────── -->
+
+</body>
+</html>

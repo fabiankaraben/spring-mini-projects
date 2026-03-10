@@ -1,0 +1,12 @@
+# ── Integration test profile configuration ───────────────────────────────────────
+# Activated via @ActiveProfiles("integration-test") in EmailControllerIntegrationTest.
+#
+# Spring Mail host/port are overridden at runtime by @DynamicPropertySource
+# with the Mailpit Testcontainer SMTP port — no static values are needed here.
+
+# ── Logging: reduce noise during integration test runs ────────────────────────────
+logging:
+  level:
+    root: WARN
+    com.example.javamailsender: INFO
+    org.springframework.mail: INFO
