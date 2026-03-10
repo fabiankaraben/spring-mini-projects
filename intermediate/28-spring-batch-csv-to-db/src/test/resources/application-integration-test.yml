@@ -1,0 +1,43 @@
+# ── Integration-test Spring profile ──────────────────────────────────────────
+# Activated via @ActiveProfiles("integration-test") on the integration test class.
+# Overrides the default application.yml with settings suited for the Testcontainers
+# PostgreSQL instance. The actual JDBC URL/credentials are injected at runtime by
+# @DynamicPropertySource, so values below are just structural stubs.
+
+spring:
+  # ── Flyway ──────────────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # Allow Flyway to run against a non-empty schema (Testcontainers may create a default schema)
+    baseline-on-migrate: true
+
+  # ── JPA ─────────────────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      # "validate" is safe – Flyway creates the schema; Hibernate just checks it matches
+      ddl-auto: validate
+    # Disable SQL logging in tests to keep output clean (enable for debugging)
+    show-sql: false
+
+  # ── Spring Batch ────────────────────────────────────────────────────────────
+  batch:
+    job:
+      # Keep auto-execution disabled; tests launch the job manually via JobLauncher
+      enabled: false
+    jdbc:
+      # Flyway (V2 migration) already creates the Spring Batch tables
+      initialize-schema: never
+
+# ── Batch-specific application properties ────────────────────────────────────
+batch:
+  # Use the bundled sample CSV (classpath) for integration tests
+  csv-file-path: classpath:data/employees.csv
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.example.batchcsvtodb: DEBUG
+    org.springframework.batch: INFO
+    org.flywaydb: INFO
+    org.testcontainers: WARN

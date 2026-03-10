@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: spring-batch-csv-to-db
+
+  # ── DataSource ──────────────────────────────────────────────────────────────
+  # These values are used when running locally (outside Docker).
+  # When running via Docker Compose they are overridden by environment variables
+  # set in docker-compose.yml (SPRING_DATASOURCE_URL, etc.).
+  datasource:
+    url: jdbc:postgresql://localhost:5432/batchdb
+    username: batch
+    password: batch
+    driver-class-name: org.postgresql.Driver
+    # HikariCP connection pool settings
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 30000
+
+  # ── JPA / Hibernate ─────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      # "validate" – Hibernate checks the schema matches the entities but does NOT
+      # create or alter tables. Schema is managed exclusively by Flyway.
+      ddl-auto: validate
+    # Show SQL in logs during development; set to false in production
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # ── Flyway ──────────────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    # Flyway looks for migration scripts in classpath:db/migration by default
+    locations: classpath:db/migration
+    # Allows Flyway to run on a database that already has tables (non-empty schema)
+    baseline-on-migrate: true
+
+  # ── Spring Batch ────────────────────────────────────────────────────────────
+  batch:
+    job:
+      # Disable automatic job execution on application startup.
+      # Jobs are triggered manually via the REST endpoint instead.
+      enabled: false
+    jdbc:
+      # "always" – Flyway creates the Spring Batch meta-data tables via a
+      # migration script, so we tell Spring Batch NOT to re-initialize them.
+      # Change to "always" only if you want Spring Boot to manage the schema.
+      initialize-schema: never
+
+# ── Batch-specific application properties ────────────────────────────────────
+batch:
+  # Path to the input CSV file.
+  # In Docker Compose this is overridden to "file:/data/employees.csv" so the
+  # file can be placed on the host and mounted into the container.
+  csv-file-path: classpath:data/employees.csv
+
+# ── Actuator ─────────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.example.batchcsvtodb: DEBUG
+    org.springframework.batch: INFO
+    org.flywaydb: INFO
