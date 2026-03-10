@@ -1,0 +1,66 @@
+services:
+  # ── PostgreSQL – Quartz JDBC job-store and application database ───────────────
+  # Quartz stores all job definitions, trigger schedules, and execution state
+  # in PostgreSQL instead of the in-memory RAMJobStore.  This means:
+  #   • Scheduled jobs survive application restarts.
+  #   • Multiple application instances can share the same job store (clustering).
+  #
+  # Flyway applies the Quartz DDL (V1__quartz_tables.sql) and the custom
+  # audit-log table (V2__create_job_audit_log.sql) on every application startup.
+  postgres:
+    image: postgres:16-alpine
+    container_name: quartz-scheduler-postgres
+    ports:
+      # Expose port 5432 on the host so you can connect with psql or a GUI tool:
+      # psql -h localhost -p 5432 -U quartz -d quartzdb
+      - "5432:5432"
+    environment:
+      # Database credentials – must match spring.datasource.* in application.yml
+      POSTGRES_DB: quartzdb
+      POSTGRES_USER: quartz
+      POSTGRES_PASSWORD: quartz
+    volumes:
+      # Named volume persists database data across container restarts.
+      # Remove this volume to start with a clean database: docker volume rm quartz-scheduler-pgdata
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Wait until PostgreSQL is ready to accept connections before starting the app.
+      # pg_isready exits 0 when the server is accepting connections.
+      test: ["CMD-SHELL", "pg_isready -U quartz -d quartzdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Spring Boot application ───────────────────────────────────────────────────
+  # The Quartz Scheduler application.  It connects to the PostgreSQL service
+  # above and exposes the REST API on port 8080.
+  app:
+    build: .
+    container_name: quartz-scheduler-app
+    ports:
+      # Map host port 8080 to the container's Spring Boot port.
+      # Access the API at: http://localhost:8080
+      - "8080:8080"
+    environment:
+      # ── Spring DataSource ──────────────────────────────────────────────────
+      # Docker Compose service names act as DNS hostnames within the compose
+      # network, so "postgres" resolves to the PostgreSQL container's IP.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/quartzdb
+      SPRING_DATASOURCE_USERNAME: quartz
+      SPRING_DATASOURCE_PASSWORD: quartz
+      # ── JPA ────────────────────────────────────────────────────────────────
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      # ── Quartz ─────────────────────────────────────────────────────────────
+      SPRING_QUARTZ_JOB_STORE_TYPE: jdbc
+      SPRING_QUARTZ_JDBC_INITIALIZE_SCHEMA: never
+    depends_on:
+      postgres:
+        # Wait for the healthcheck to pass before starting the Spring Boot app.
+        # Without this the app would try to connect before PostgreSQL is ready.
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  # Named volume for PostgreSQL data persistence
+  pgdata:

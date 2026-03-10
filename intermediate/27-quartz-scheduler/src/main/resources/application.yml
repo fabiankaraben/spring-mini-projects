@@ -1,0 +1,106 @@
+spring:
+  application:
+    name: quartz-scheduler
+
+  # ── DataSource ────────────────────────────────────────────────────────────────
+  # PostgreSQL connection. In Docker Compose the hostname is the service name.
+  # For local development outside Docker, override with environment variables:
+  #   SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD
+  datasource:
+    url: jdbc:postgresql://localhost:5432/quartzdb
+    username: quartz
+    password: quartz
+    driver-class-name: org.postgresql.Driver
+    # HikariCP connection pool settings – keeps a small pool for the scheduler
+    hikari:
+      pool-name: QuartzPool
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  # ── JPA / Hibernate ───────────────────────────────────────────────────────────
+  jpa:
+    # Use PostgreSQL dialect explicitly (Hibernate auto-detects it but being explicit is clearer)
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      # "validate" checks that the entity model matches the DB schema but does NOT create/alter tables.
+      # All DDL is managed exclusively by Flyway migrations (see src/main/resources/db/migration/).
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        # Format SQL in logs for readability when show-sql: true
+        format_sql: true
+
+  # ── Flyway ────────────────────────────────────────────────────────────────────
+  # Flyway applies all migration scripts in src/main/resources/db/migration/ on startup.
+  # This ensures both the Quartz JDBC job-store tables and our custom audit table
+  # always exist in the right state before the scheduler starts.
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  # ── Quartz Scheduler ──────────────────────────────────────────────────────────
+  quartz:
+    # jdbc – Quartz stores all job and trigger data in PostgreSQL.
+    # This means jobs survive application restarts. The tables are created
+    # by the Flyway migration V1__quartz_tables.sql.
+    job-store-type: jdbc
+
+    # always – drop and recreate the Quartz schema on every startup.
+    # Use "never" in production when you want jobs to survive restarts.
+    # We use "never" here because Flyway already manages the schema.
+    jdbc:
+      initialize-schema: never
+
+    # Scheduler instance configuration passed to Quartz directly.
+    # These map to quartz.properties entries under the hood.
+    properties:
+      org:
+        quartz:
+          scheduler:
+            # Instance name used in log messages and cluster coordination
+            instanceName: QuartzScheduler
+            # AUTO means Quartz generates a unique ID for this node (useful for clustering)
+            instanceId: AUTO
+
+          jobStore:
+            # PostgreSQL-specific SQL dialect adapter for the JDBC job store.
+            # Spring Boot auto-configures LocalDataSourceJobStore (which shares the Spring
+            # DataSource/transaction manager) when job-store-type=jdbc.  We only need to
+            # set the driver delegate and table prefix here; the datasource wiring is
+            # handled automatically by SchedulerFactoryBean.
+            driverDelegateClass: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
+            # Table name prefix – must match what is in the Flyway DDL migration
+            tablePrefix: QRTZ_
+            # false = single-node deployment (no cluster coordination overhead)
+            isClustered: false
+
+          threadPool:
+            # SimpleThreadPool is the default Quartz thread pool implementation
+            class: org.quartz.simpl.SimpleThreadPool
+            # Number of worker threads – how many jobs can run concurrently
+            threadCount: 5
+            # Thread priority (5 = NORM_PRIORITY)
+            threadPriority: 5
+
+# ── Spring Boot Actuator ──────────────────────────────────────────────────────
+# Expose health and info endpoints for operational visibility
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: always
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show INFO logs for our application code
+    com.example.quartzscheduler: INFO
+    # Reduce Quartz noise to WARN in normal operation
+    org.quartz: WARN
+    # Show WARN for Hibernate to catch schema issues
+    org.hibernate: WARN
