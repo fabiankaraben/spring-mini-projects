@@ -1,0 +1,49 @@
+server:
+  port: 8080
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Spring DataSource – PostgreSQL
+# ─────────────────────────────────────────────────────────────────────────────
+spring:
+  datasource:
+    # Default URL for local development (overridden in Docker Compose via env var)
+    # When running with Docker Compose, the 'db' service hostname is used instead
+    url: jdbc:postgresql://localhost:5432/stripedb
+    username: stripeuser
+    password: stripepass
+    driver-class-name: org.postgresql.Driver
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # JPA / Hibernate
+  # ─────────────────────────────────────────────────────────────────────────
+  jpa:
+    # create-drop: recreates the schema on each startup (good for development)
+    # In production, use 'validate' or manage schema with Flyway/Liquibase
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        # Format SQL statements in logs for readability (only when show-sql=true)
+        format_sql: true
+        # PostgreSQL dialect is auto-detected, but explicit declaration is clearer
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stripe configuration
+# ─────────────────────────────────────────────────────────────────────────────
+stripe:
+  # The Stripe secret API key.
+  # For local development: set this to your Stripe test key (sk_test_...).
+  # For Docker Compose: inject via the STRIPE_API_KEY environment variable.
+  # NEVER commit a real secret key to version control.
+  api-key: ${STRIPE_API_KEY:sk_test_placeholder}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Logging
+# ─────────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.example.stripepayment: DEBUG
+    org.hibernate.SQL: WARN
+    com.stripe: WARN
