@@ -1,0 +1,30 @@
+spring:
+  # ── Application name ──────────────────────────────────────────────────────
+  application:
+    name: pdf-generation
+
+  # ── DataSource / JDBC ─────────────────────────────────────────────────────
+  datasource:
+    # Default URL for running locally with Docker Compose.
+    # Override via the SPRING_DATASOURCE_URL environment variable when deploying.
+    url: jdbc:postgresql://localhost:5432/pdfdb
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  # ── JPA / Hibernate ───────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      # update – Hibernate modifies the schema automatically to match entities.
+      # For production use "validate" or Flyway/Liquibase migrations instead.
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        # Use the PostgreSQL-specific dialect so Hibernate generates correct SQL
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+# ── Server ───────────────────────────────────────────────────────────────────
+server:
+  port: 8080

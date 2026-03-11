@@ -1,0 +1,12 @@
+spring:
+  # ── JPA / Hibernate ───────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      # create-drop recreates the schema on every test run, giving each test
+      # suite a clean database state.
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
