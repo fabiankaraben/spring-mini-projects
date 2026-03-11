@@ -1,0 +1,22 @@
+server:
+  # Default HTTP port for the embedded Tomcat server
+  port: 8080
+
+spring:
+  application:
+    # Application name shown in logs and Spring Boot Admin (if used)
+    name: excel-export
+
+  # ── Jackson JSON serialisation ────────────────────────────────────────────────
+  jackson:
+    # Serialize BigDecimal as plain number (not scientific notation)
+    deserialization:
+      fail-on-unknown-properties: false
+
+# ── Actuator (optional health endpoint) ──────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expose the health endpoint so Docker / load-balancer can probe it
+        include: health

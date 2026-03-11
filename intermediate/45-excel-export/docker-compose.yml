@@ -1,0 +1,20 @@
+services:
+  # ── Spring Boot application ──────────────────────────────────────────────────
+  # This application generates Excel files entirely in-memory using Apache POI,
+  # so no external database or storage service is required.
+  app:
+    build: .
+    container_name: excelexport-app
+    ports:
+      # Map host port 8080 → container port 8080 (Spring Boot default)
+      - "8080:8080"
+    environment:
+      # Override the server port if needed (default is 8080 from application.yml)
+      - SERVER_PORT=8080
+    healthcheck:
+      # Spring Boot Actuator /actuator/health endpoint returns 200 when ready
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
