@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: validation-groups
+
+  # ── DataSource ────────────────────────────────────────────────────────────
+  datasource:
+    # Default URL targets a local PostgreSQL instance.
+    # When running via Docker Compose, this is overridden by the
+    # SPRING_DATASOURCE_URL environment variable defined in docker-compose.yml
+    # so that "db" resolves to the PostgreSQL container on the internal network.
+    url: jdbc:postgresql://localhost:5432/validationgroupsdb
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  # ── JPA / Hibernate ───────────────────────────────────────────────────────
+  jpa:
+    # create-drop: drop and recreate the schema on every startup/shutdown.
+    # Suitable for development; use "validate" or "none" in production.
+    hibernate:
+      ddl-auto: create-drop
+    # Log generated SQL to stdout so you can see the INSERT/UPDATE queries
+    show-sql: true
+    properties:
+      hibernate:
+        # Pretty-print the SQL statements so they are easier to read in logs
+        format_sql: true
+        # Target PostgreSQL dialect – lets Hibernate use Postgres-specific SQL features
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+# ── Server ───────────────────────────────────────────────────────────────────
+server:
+  port: 8080
