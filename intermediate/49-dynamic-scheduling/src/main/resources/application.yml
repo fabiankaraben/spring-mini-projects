@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: dynamic-scheduling
+
+  # ── DataSource ────────────────────────────────────────────────────────────────
+  # PostgreSQL connection. In Docker Compose the hostname is the service name.
+  # For local development outside Docker, override with environment variables:
+  #   SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD
+  datasource:
+    url: jdbc:postgresql://localhost:5432/schedulingdb
+    username: scheduler
+    password: scheduler
+    driver-class-name: org.postgresql.Driver
+    # HikariCP connection pool – small pool is sufficient for this demo
+    hikari:
+      pool-name: SchedulingPool
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  # ── JPA / Hibernate ───────────────────────────────────────────────────────────
+  jpa:
+    # Use PostgreSQL dialect explicitly
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      # "validate" checks that entity model matches the DB schema but does NOT create/alter tables.
+      # All DDL is managed exclusively by Flyway migrations (see src/main/resources/db/migration/).
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        # Format SQL in logs for readability when show-sql: true
+        format_sql: true
+
+  # ── Flyway ────────────────────────────────────────────────────────────────────
+  # Flyway applies all migration scripts in src/main/resources/db/migration/ on startup.
+  # V1 creates the tables; V2 inserts the seed task configurations.
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+# ── Spring Boot Actuator ──────────────────────────────────────────────────────
+# Expose health and info endpoints for operational visibility.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: always
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level:
+    # Show INFO logs for our application code
+    com.example.dynamicscheduling: INFO
+    # Reduce Hibernate noise to WARN in normal operation
+    org.hibernate: WARN

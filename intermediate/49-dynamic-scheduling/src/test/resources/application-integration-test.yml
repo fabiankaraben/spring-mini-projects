@@ -1,0 +1,30 @@
+# ── Integration-test Spring profile ──────────────────────────────────────────
+# This profile is activated by @ActiveProfiles("integration-test") on the
+# integration test classes.  It overrides the default application.yml values
+# with settings appropriate for the Testcontainers PostgreSQL instance.
+#
+# The actual JDBC URL, username, and password are injected at runtime by
+# @DynamicPropertySource in the test class, so the values here are just
+# placeholders that get overridden before the Spring context starts.
+
+spring:
+  # Flyway must run so that task_config and task_execution_log tables are
+  # created in the test database container before the scheduler tries to use them.
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  jpa:
+    hibernate:
+      # "create-drop" recreates the schema on every test run for a clean slate.
+      # Flyway handles the DDL so we set validate to stay consistent.
+      ddl-auto: validate
+    # Disable SQL logging during integration tests to reduce noise
+    show-sql: false
+
+logging:
+  level:
+    com.example.dynamicscheduling: DEBUG
+    org.flywaydb: INFO
+    org.hibernate: WARN

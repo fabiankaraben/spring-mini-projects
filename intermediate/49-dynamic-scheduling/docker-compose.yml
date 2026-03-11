@@ -1,0 +1,64 @@
+services:
+  # ── PostgreSQL – persistent store for task configs and execution logs ──────────
+  # The dynamic-scheduling application persists two types of data to PostgreSQL:
+  #   1. task_config      – each task's name, interval, and enabled flag.
+  #   2. task_execution_log – an append-only audit record of every execution.
+  #
+  # Flyway applies V1 (create tables) and V2 (seed tasks) on first startup.
+  # Subsequent restarts are no-ops because Flyway tracks applied migrations.
+  postgres:
+    image: postgres:16-alpine
+    container_name: dynamic-scheduling-postgres
+    ports:
+      # Expose port 5432 on the host so you can connect with psql or a GUI tool:
+      # psql -h localhost -p 5432 -U scheduler -d schedulingdb
+      - "5432:5432"
+    environment:
+      # Database credentials – must match spring.datasource.* in application.yml
+      POSTGRES_DB: schedulingdb
+      POSTGRES_USER: scheduler
+      POSTGRES_PASSWORD: scheduler
+    volumes:
+      # Named volume persists database data across container restarts.
+      # Remove this volume to start with a clean database:
+      #   docker volume rm dynamic-scheduling-pgdata
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Wait until PostgreSQL is ready to accept connections before starting the app.
+      # pg_isready exits 0 when the server is accepting connections.
+      test: ["CMD-SHELL", "pg_isready -U scheduler -d schedulingdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Spring Boot application ───────────────────────────────────────────────────
+  # The dynamic-scheduling application connects to the PostgreSQL service above,
+  # applies Flyway migrations (creates tables + seeds initial tasks), and then
+  # starts the dynamic task scheduler.  The REST API is available on port 8080.
+  app:
+    build: .
+    container_name: dynamic-scheduling-app
+    ports:
+      # Map host port 8080 to the container's Spring Boot port.
+      # Access the REST API at: http://localhost:8080
+      - "8080:8080"
+    environment:
+      # ── Spring DataSource ──────────────────────────────────────────────────
+      # Docker Compose service names act as DNS hostnames within the compose
+      # network, so "postgres" resolves to the PostgreSQL container's IP.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/schedulingdb
+      SPRING_DATASOURCE_USERNAME: scheduler
+      SPRING_DATASOURCE_PASSWORD: scheduler
+      # ── JPA ────────────────────────────────────────────────────────────────
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+    depends_on:
+      postgres:
+        # Wait for the healthcheck to pass before starting the Spring Boot app.
+        # Without this the app would try to connect before PostgreSQL is ready.
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  # Named volume for PostgreSQL data persistence
+  pgdata:
