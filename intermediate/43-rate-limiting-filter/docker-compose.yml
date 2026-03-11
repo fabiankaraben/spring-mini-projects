@@ -1,0 +1,38 @@
+services:
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  # Redis stores the per-client token-bucket state (token count + refill
+  # timestamp). Using Redis makes the rate limiter work correctly even when
+  # multiple app instances run behind a load balancer.
+  redis:
+    image: redis:7-alpine
+    container_name: ratelimitingfilter-redis
+    ports:
+      # Expose port 6379 so you can inspect state with redis-cli locally:
+      #   redis-cli -h localhost -p 6379 keys "rate_limit:*"
+      - "6379:6379"
+    healthcheck:
+      # redis-cli PING returns PONG when the server is ready
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Spring Boot application ──────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: ratelimitingfilter-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        # Wait until the Redis healthcheck passes before starting the app;
+        # this avoids "Connection refused" errors on startup.
+        condition: service_healthy
+    environment:
+      # Override the Redis host so "redis" resolves to the service name inside
+      # the Docker Compose network instead of looking for localhost.
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      # Rate limiter configuration (can be overridden here for different environments)
+      - APP_RATE_LIMIT_CAPACITY=10
+      - APP_RATE_LIMIT_REFILL_PERIOD_SECONDS=60

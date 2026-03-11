@@ -1,0 +1,29 @@
+server:
+  port: 8080
+
+spring:
+  # ── Redis connection ─────────────────────────────────────────────────────────
+  data:
+    redis:
+      # Host and port can be overridden via environment variables:
+      #   SPRING_DATA_REDIS_HOST and SPRING_DATA_REDIS_PORT
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+# ── Actuator ─────────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+
+# ── Rate limiter configuration ────────────────────────────────────────────────
+app:
+  rate-limit:
+    # Maximum number of requests (tokens) allowed per window
+    capacity: 10
+    # Duration of the replenishment window in seconds.
+    # After this period the token count is fully reset.
+    refill-period-seconds: 60
+    # Redis key prefix used for storing per-client token bucket state
+    key-prefix: "rate_limit:"
