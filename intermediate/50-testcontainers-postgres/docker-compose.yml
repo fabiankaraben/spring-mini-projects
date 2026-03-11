@@ -1,0 +1,83 @@
+# ============================================================================
+# Docker Compose file for the Testcontainers Postgres mini-project
+#
+# This file defines the full production stack:
+#   1. postgres  — the PostgreSQL database
+#   2. app       — the Spring Boot application (built from the Dockerfile)
+#
+# Usage:
+#   docker compose up --build       # Build and start all services
+#   docker compose up --build -d    # Same, but in detached (background) mode
+#   docker compose down             # Stop and remove containers
+#   docker compose down -v          # Also remove the named volume (wipes DB data)
+#
+# Note: Testcontainers (used in integration tests) spins up its OWN separate
+# PostgreSQL container during `./mvnw test`. This docker-compose.yml is only
+# for running the application itself (not for tests).
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # PostgreSQL database service
+  #
+  # Uses the official postgres:16-alpine image — the same version used by
+  # Testcontainers in the integration tests, ensuring test/production parity.
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: testcontainers-postgres-db
+    environment:
+      # These values must match spring.datasource.* in application.yml,
+      # or the SPRING_DATASOURCE_* env vars set in the app service below.
+      POSTGRES_DB: productsdb
+      POSTGRES_USER: products_user
+      POSTGRES_PASSWORD: products_pass
+    ports:
+      # Expose the PostgreSQL port to the host for local development tools
+      # (e.g. pgAdmin, DBeaver, psql). Remove this in strict production setups.
+      - "5432:5432"
+    volumes:
+      # Named volume: persists PostgreSQL data across container restarts.
+      # Without this, all data is lost every time the container is recreated.
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready checks whether the PostgreSQL server is accepting connections.
+      # The app service's `depends_on.condition` uses this to delay startup.
+      test: ["CMD-SHELL", "pg_isready -U products_user -d productsdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # Spring Boot application service
+  #
+  # Built from the multi-stage Dockerfile in the project root.
+  # Waits for the postgres service to be healthy before starting.
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: testcontainers-postgres-app
+    ports:
+      - "8080:8080"
+    environment:
+      # Override the DataSource properties from application.yml to point to
+      # the postgres service. Docker Compose creates an internal DNS entry for
+      # each service name, so "postgres" resolves to the postgres container's IP.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/productsdb
+      SPRING_DATASOURCE_USERNAME: products_user
+      SPRING_DATASOURCE_PASSWORD: products_pass
+      # Hibernate will create/update the schema on startup — safe for development
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    depends_on:
+      postgres:
+        # Only start the app after postgres passes its healthcheck.
+        # This prevents "connection refused" errors during app startup.
+        condition: service_healthy
+
+# Named volumes are managed by Docker and persist between `docker compose down`
+# calls. They are only removed with `docker compose down -v`.
+volumes:
+  postgres_data:
