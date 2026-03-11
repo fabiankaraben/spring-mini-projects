@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: barcode-generator-test
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  level:
+    root: WARN
+    # Keep DEBUG for our own packages during tests to aid troubleshooting
+    com.example.barcodegenerator: DEBUG

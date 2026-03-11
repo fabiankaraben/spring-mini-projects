@@ -1,0 +1,14 @@
+server:
+  # Default port – override with SERVER_PORT env variable if needed
+  port: 8080
+
+spring:
+  application:
+    name: barcode-generator
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  level:
+    root: INFO
+    # Enable DEBUG for our own packages to see barcode generation details
+    com.example.barcodegenerator: DEBUG
