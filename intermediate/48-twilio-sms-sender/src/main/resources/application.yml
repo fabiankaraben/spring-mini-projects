@@ -1,0 +1,59 @@
+server:
+  port: 8080
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Spring DataSource – PostgreSQL
+# ─────────────────────────────────────────────────────────────────────────────
+spring:
+  datasource:
+    # Default URL for local development (overridden in Docker Compose via env var)
+    # When running with Docker Compose, the 'db' service hostname is used instead
+    url: jdbc:postgresql://localhost:5432/twiliosmsdb
+    username: twiliouser
+    password: twiliopass
+    driver-class-name: org.postgresql.Driver
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # JPA / Hibernate
+  # ─────────────────────────────────────────────────────────────────────────
+  jpa:
+    # create-drop: recreates the schema on each startup (good for development)
+    # In production, use 'validate' or manage schema with Flyway/Liquibase
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        # Format SQL statements in logs for readability (only when show-sql=true)
+        format_sql: true
+        # PostgreSQL dialect is auto-detected, but explicit declaration is clearer
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Twilio configuration
+# ─────────────────────────────────────────────────────────────────────────────
+twilio:
+  # Your Twilio Account SID – find it at https://console.twilio.com
+  # Format: "AC" followed by 32 hex characters
+  # NEVER commit a real Account SID to version control.
+  # Use the TWILIO_ACCOUNT_SID environment variable to override this.
+  account-sid: ${TWILIO_ACCOUNT_SID:ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}
+
+  # Your Twilio Auth Token – find it at https://console.twilio.com
+  # NEVER commit a real Auth Token to version control.
+  # Use the TWILIO_AUTH_TOKEN environment variable to override this.
+  auth-token: ${TWILIO_AUTH_TOKEN:your_auth_token_here}
+
+  # The Twilio phone number to use as the SMS sender.
+  # Must be a Twilio-provisioned number in E.164 format (e.g., +15551234567).
+  # Use the TWILIO_PHONE_NUMBER environment variable to override this.
+  phone-number: ${TWILIO_PHONE_NUMBER:+15550000000}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Logging
+# ─────────────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.example.twiliosmssender: DEBUG
+    org.hibernate.SQL: WARN
+    com.twilio: WARN

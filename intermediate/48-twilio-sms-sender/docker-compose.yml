@@ -1,0 +1,55 @@
+services:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PostgreSQL – relational database for storing local SMS message records
+  # ─────────────────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: twiliosmssender-db
+    environment:
+      # Database credentials – match the values in application.yml
+      POSTGRES_DB: twiliosmsdb
+      POSTGRES_USER: twiliouser
+      POSTGRES_PASSWORD: twiliopass
+    ports:
+      # Expose port 5432 for optional local inspection tools (e.g., DBeaver, psql)
+      - "5432:5432"
+    volumes:
+      # Persist data across container restarts with a named volume
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Use pg_isready to wait until PostgreSQL is ready to accept connections
+      test: ["CMD-SHELL", "pg_isready -U twiliouser -d twiliosmsdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Spring Boot application
+  # ─────────────────────────────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: twiliosmssender-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        # Wait until PostgreSQL is healthy before starting the app
+        condition: service_healthy
+    environment:
+      # Override the datasource URL to use the 'db' service hostname (Docker internal DNS)
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/twiliosmsdb
+      SPRING_DATASOURCE_USERNAME: twiliouser
+      SPRING_DATASOURCE_PASSWORD: twiliopass
+      # ── Twilio credentials ──────────────────────────────────────────────
+      # Inject your real Twilio credentials here or via a .env file.
+      # Get your Account SID and Auth Token at: https://console.twilio.com
+      # NEVER commit real credentials to version control.
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-your_auth_token_here}
+      # The Twilio phone number to send SMS from (E.164 format, e.g. +15551234567)
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-+15550000000}
+
+volumes:
+  # Named volume for PostgreSQL data persistence
+  postgres_data:
