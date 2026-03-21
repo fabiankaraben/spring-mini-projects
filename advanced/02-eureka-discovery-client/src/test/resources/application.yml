@@ -1,0 +1,57 @@
+# ============================================================================
+# application.yml — Test configuration for the Eureka Discovery Client
+#
+# This file overrides application.yml during test execution.
+# The key difference from the main config is that Eureka registration and
+# registry fetching are DISABLED so tests run without needing a live Eureka
+# server (except for the integration tests that start one via Testcontainers).
+# ============================================================================
+
+spring:
+  application:
+    name: product-service
+
+server:
+  # Use port 0 during tests — Spring Boot will assign a random free port.
+  # This avoids port conflicts when tests run in parallel or alongside a
+  # running development server.
+  port: 0
+
+eureka:
+  instance:
+    hostname: localhost
+
+  client:
+    # -------------------------------------------------------------------------
+    # Disable Eureka client behaviour in unit/integration tests.
+    #
+    # register-with-eureka: false — prevents the test context from trying to
+    #   POST a registration to a Eureka server that isn't running.
+    #
+    # fetch-registry: false — prevents the client from trying to GET the
+    #   registry, which would fail immediately (ConnectException) if no
+    #   Eureka server is reachable.
+    #
+    # The integration test (EurekaClientIntegrationTest) overrides these
+    # values dynamically using @DynamicPropertySource to point at the
+    # Eureka server container started by Testcontainers.
+    # -------------------------------------------------------------------------
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.netflix.eureka: ERROR
+    com.netflix.discovery: ERROR
+    com.example.eurekadiscoveryclient: INFO

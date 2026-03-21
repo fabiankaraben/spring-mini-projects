@@ -1,0 +1,97 @@
+# ============================================================================
+# application.yml — Eureka Discovery Client configuration
+#
+# This file configures the Spring Boot application that acts as a Eureka
+# discovery client (microservice). The key concerns are:
+#   1. Giving the service a meaningful name so it appears correctly in the
+#      Eureka dashboard and can be looked up by other services.
+#   2. Pointing the client to the Eureka server's URL so it knows where
+#      to register and where to fetch the registry from.
+#   3. Exposing enough Actuator endpoints for Eureka's health check to work.
+# ============================================================================
+
+spring:
+  application:
+    # This name is used as the service ID in the Eureka registry.
+    # Other services discover this application using this exact name
+    # (case-insensitive). Keep it lowercase-with-hyphens by convention.
+    name: product-service
+
+server:
+  # Port on which this microservice listens.
+  # Port 8080 is the conventional default for Spring Boot microservices.
+  # In a Docker Compose stack this is mapped to the host port.
+  port: 8080
+
+eureka:
+  instance:
+    # The hostname used when registering with the Eureka server.
+    # Using "localhost" here works for running outside Docker.
+    # When running in Docker Compose, this is overridden via environment
+    # variable: EUREKA_INSTANCE_HOSTNAME=product-service
+    hostname: localhost
+
+    # How often (in seconds) this instance sends a heartbeat to the Eureka server.
+    # Default is 30 s. Lowered here for faster feedback in development.
+    lease-renewal-interval-in-seconds: 10
+
+    # How long (in seconds) the Eureka server waits after the last heartbeat
+    # before considering this instance expired (eligible for eviction).
+    # Default is 90 s. Keep this at 3× the renewal interval.
+    lease-expiration-duration-in-seconds: 30
+
+  client:
+    # -------------------------------------------------------------------------
+    # Eureka server URL
+    #
+    # This is the address of the Eureka server where this client registers.
+    # In standalone development (no Docker): uses localhost:8761.
+    # In Docker Compose: overridden via environment variable:
+    #   EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
+    #
+    # The path /eureka/ is mandatory — it is the root of the Eureka REST API.
+    # -------------------------------------------------------------------------
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+    # Register this service instance with the Eureka server on startup.
+    # Set to true (default) so other services can discover this one.
+    register-with-eureka: true
+
+    # Fetch the full registry from the Eureka server so this client can
+    # discover other services. Set to true (default) for full participation.
+    fetch-registry: true
+
+    # How often (in seconds) to refresh the local registry cache.
+    # Default is 30 s. Lowered here for faster discovery of new services.
+    registry-fetch-interval-seconds: 10
+
+# ============================================================================
+# Spring Boot Actuator
+#
+# Eureka uses the /actuator/health endpoint to determine whether this instance
+# should be marked "UP" or "DOWN" in the registry. Exposing it is required for
+# correct health-based registration behaviour.
+# ============================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: always
+
+# ============================================================================
+# Logging
+#
+# Reduce the noise from Eureka client internals (very chatty by default)
+# while keeping application-level logging at INFO.
+# ============================================================================
+logging:
+  level:
+    # Suppress verbose Eureka client heartbeat and registry-refresh DEBUG messages
+    com.netflix.eureka: WARN
+    com.netflix.discovery: WARN
+    # Keep our own application classes at INFO level
+    com.example.eurekadiscoveryclient: INFO

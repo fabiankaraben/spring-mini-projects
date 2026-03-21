@@ -1,0 +1,108 @@
+# ============================================================================
+# Docker Compose file for the Eureka Discovery Client mini-project
+#
+# This file defines a two-service stack:
+#   1. eureka-server  — a standalone Eureka Discovery Server (pulled from the
+#                       pre-built image of the 01-eureka-discovery-server project,
+#                       or using the steeltoeoss/eureka-server image as fallback).
+#   2. product-service — this Eureka Discovery Client, built from the local
+#                        Dockerfile.
+#
+# The product-service registers itself with the eureka-server on startup and
+# sends periodic heartbeats to maintain its registration.
+#
+# Usage:
+#   docker compose up --build       # Build product-service and start both services
+#   docker compose up --build -d    # Same, but in detached (background) mode
+#   docker compose down             # Stop and remove containers
+#   docker compose logs -f          # Follow logs from all services
+#
+# Accessing services after startup:
+#   Eureka Dashboard:       http://localhost:8761/
+#   Eureka REST API:        http://localhost:8761/eureka/apps
+#   Product list:           http://localhost:8080/products
+#   Client status:          http://localhost:8080/client/status
+#   Discovered services:    http://localhost:8080/client/services
+#   Actuator health:        http://localhost:8080/actuator/health
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Eureka Discovery Server
+  #
+  # We use the official steeltoeoss/eureka-server image, which is a standard
+  # Eureka server for testing and development. It runs on port 8761.
+  #
+  # In a real multi-project setup you could reference the image built by the
+  # 01-eureka-discovery-server project. Here we use a public image so this
+  # project remains self-contained.
+  # --------------------------------------------------------------------------
+  eureka-server:
+    image: steeltoeoss/eureka-server:latest
+    container_name: eureka-discovery-server
+    ports:
+      # Map host port 8761 to container port 8761.
+      # Accessible at http://localhost:8761/
+      - "8761:8761"
+    healthcheck:
+      # Poll the Eureka apps endpoint. The product-service depends_on this
+      # becoming healthy before it starts, ensuring the Eureka server is ready
+      # to accept registrations before the client tries to register.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8761/eureka/apps || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # Product Service (Eureka Discovery Client)
+  #
+  # Built from the multi-stage Dockerfile in this project root.
+  # Registers itself with the eureka-server under the name "product-service"
+  # (as defined in spring.application.name in application.yml).
+  #
+  # The service will appear in the Eureka dashboard at:
+  #   http://localhost:8761/  → PRODUCT-SERVICE entry
+  # --------------------------------------------------------------------------
+  product-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: product-service
+    ports:
+      # Map host port 8080 to container port 8080.
+      # Accessible at http://localhost:8080/
+      - "8080:8080"
+    environment:
+      # Override the hostname so the product-service registers itself in Eureka
+      # with a hostname that is reachable from within the Docker network.
+      # Without this override, it would register with "localhost", which is
+      # not reachable by other containers.
+      EUREKA_INSTANCE_HOSTNAME: product-service
+
+      # Point the Eureka client at the eureka-server service using the Docker
+      # Compose DNS name ("eureka-server"). Docker Compose creates a default
+      # network and maps container names to DNS hostnames automatically.
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+
+      # Enable registration and registry fetching (they are already true by
+      # default in application.yml, but explicit is better for documentation).
+      EUREKA_CLIENT_REGISTER_WITH_EUREKA: "true"
+      EUREKA_CLIENT_FETCH_REGISTRY: "true"
+    depends_on:
+      eureka-server:
+        # Wait until the Eureka server health check passes before starting
+        # the product-service. This prevents "Connection refused" errors
+        # during the initial registration attempt.
+        condition: service_healthy
+    healthcheck:
+      # Probe the Spring Boot Actuator health endpoint.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
