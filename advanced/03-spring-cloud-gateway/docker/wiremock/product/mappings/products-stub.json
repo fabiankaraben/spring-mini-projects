@@ -1,0 +1,21 @@
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "GET /products — returns list of products",
+  "request": {
+    "method": "GET",
+    "urlPattern": "/products.*"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": [
+      { "id": 1, "name": "Laptop",    "price": 1299.99, "category": "Electronics" },
+      { "id": 2, "name": "Mouse",     "price":   29.99, "category": "Electronics" },
+      { "id": 3, "name": "Monitor",   "price":  399.99, "category": "Electronics" },
+      { "id": 4, "name": "Keyboard",  "price":   79.99, "category": "Electronics" },
+      { "id": 5, "name": "USB-C Hub", "price":   49.99, "category": "Electronics" }
+    ]
+  }
+}

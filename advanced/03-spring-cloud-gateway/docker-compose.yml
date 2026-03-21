@@ -1,0 +1,150 @@
+# ============================================================================
+# Docker Compose file for the Spring Cloud Gateway mini-project
+#
+# This file defines a four-service stack:
+#   1. product-service — a WireMock stub acting as a downstream product API
+#   2. order-service   — a WireMock stub acting as a downstream order API
+#   3. user-service    — a WireMock stub acting as a downstream user API
+#   4. api-gateway     — the Spring Cloud Gateway (built from local Dockerfile)
+#
+# The gateway routes incoming traffic to the three downstream stubs:
+#   /api/products/** → product-service:8080/products/**
+#   /api/orders/**   → order-service:8080/orders/**
+#   /api/users/**    → user-service:8080/v1/users/**  (path rewrite)
+#
+# Usage:
+#   docker compose up --build       # Build gateway image and start all services
+#   docker compose up --build -d    # Same, but in detached (background) mode
+#   docker compose down             # Stop and remove containers
+#   docker compose logs -f          # Follow logs from all services
+#   docker compose logs -f api-gateway  # Follow logs only from the gateway
+#
+# Accessing services after startup:
+#   Gateway:                  http://localhost:8080
+#   Products (via gateway):   http://localhost:8080/api/products
+#   Orders (via gateway):     http://localhost:8080/api/orders
+#   Users (via gateway):      http://localhost:8080/api/users
+#   Gateway status:           http://localhost:8080/gateway/status
+#   Gateway routes:           http://localhost:8080/gateway/routes
+#   Actuator health:          http://localhost:8080/actuator/health
+#   Actuator gateway routes:  http://localhost:8080/actuator/gateway/routes
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Product Service stub (WireMock)
+  #
+  # WireMock is a mock HTTP server that responds with pre-configured stub
+  # responses. In this project it simulates the downstream product microservice.
+  #
+  # The stub mapping files are mounted from the docker/wiremock/product/
+  # directory. WireMock reads them at startup and serves them as HTTP responses.
+  #
+  # The gateway routes /api/products/** to this container as /products/**
+  # (StripPrefix=1 removes the leading /api segment).
+  # --------------------------------------------------------------------------
+  product-service:
+    image: wiremock/wiremock:3.9.2
+    container_name: product-service
+    # WireMock stores mappings under /home/wiremock/mappings inside the container.
+    # We mount our stub files there so it picks them up at startup.
+    volumes:
+      - ./docker/wiremock/product/mappings:/home/wiremock/mappings:ro
+    ports:
+      # WireMock listens on 8080 by default inside the container.
+      # We map it to 8081 on the host for direct access if needed.
+      - "8081:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/__admin/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # Order Service stub (WireMock)
+  #
+  # Simulates the downstream order microservice.
+  # The gateway routes /api/orders/** to this container as /orders/**.
+  # --------------------------------------------------------------------------
+  order-service:
+    image: wiremock/wiremock:3.9.2
+    container_name: order-service
+    volumes:
+      - ./docker/wiremock/order/mappings:/home/wiremock/mappings:ro
+    ports:
+      - "8082:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/__admin/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # User Service stub (WireMock)
+  #
+  # Simulates the downstream user microservice.
+  # The gateway applies a RewritePath filter:
+  #   /api/users/**  →  /v1/users/**
+  # So this WireMock must stub /v1/users/** paths.
+  # --------------------------------------------------------------------------
+  user-service:
+    image: wiremock/wiremock:3.9.2
+    container_name: user-service
+    volumes:
+      - ./docker/wiremock/user/mappings:/home/wiremock/mappings:ro
+    ports:
+      - "8083:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/__admin/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # API Gateway (Spring Cloud Gateway)
+  #
+  # Built from the multi-stage Dockerfile in this project root.
+  # Routes requests from port 8080 to the three downstream stub services above.
+  #
+  # The downstream service URLs are overridden here via environment variables
+  # to use Docker Compose DNS names (container names) instead of localhost.
+  # Docker Compose creates a default network and resolves container names to
+  # their internal IP addresses automatically.
+  # --------------------------------------------------------------------------
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    ports:
+      # Map host port 8080 to container port 8080.
+      # All client traffic enters here and is routed to downstream services.
+      - "8080:8080"
+    environment:
+      # Override downstream service URIs to use Docker Compose DNS names.
+      # Inside the Docker network, containers reach each other by service name.
+      # WireMock listens on 8080 inside the container (not the mapped host port).
+      SERVICES_PRODUCT_URL: http://product-service:8080
+      SERVICES_ORDER_URL: http://order-service:8080
+      SERVICES_USER_URL: http://user-service:8080
+    depends_on:
+      product-service:
+        # Wait until product-service WireMock is healthy before starting gateway.
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s

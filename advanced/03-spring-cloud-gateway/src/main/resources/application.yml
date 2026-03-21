@@ -1,0 +1,113 @@
+# ============================================================================
+# application.yml — Spring Cloud Gateway configuration
+#
+# This file configures the API Gateway. Key concerns:
+#   1. Giving the gateway a meaningful application name.
+#   2. Configuring the server port (8080 is the public-facing gateway port).
+#   3. Configuring downstream service URIs (overridable per environment).
+#   4. Exposing Actuator endpoints for health checks and route inspection.
+#   5. Setting logging levels to keep output readable.
+#
+# Routes are defined programmatically in GatewayRoutesConfig.java (Java DSL).
+# You can also define routes here under spring.cloud.gateway.routes — see the
+# commented example at the bottom of this file.
+# ============================================================================
+
+spring:
+  application:
+    # The application name appears in logs, Actuator info, and service registries.
+    name: spring-cloud-gateway
+
+server:
+  # Port 8080: the public-facing port that clients call.
+  # All traffic enters here and the gateway routes it to downstream services.
+  port: 8080
+
+# ============================================================================
+# Downstream service URIs
+#
+# These values are read by GatewayRoutesConfig.java via @Value injection.
+# Override per environment using:
+#   - Environment variables: SERVICES_PRODUCT_URL, SERVICES_ORDER_URL, etc.
+#   - Docker Compose environment: section in docker-compose.yml
+#   - System properties: -Dservices.product.url=http://...
+# ============================================================================
+services:
+  product:
+    # Base URL of the downstream product microservice.
+    # In Docker Compose this is overridden to http://product-service:8081.
+    url: http://localhost:8081
+  order:
+    # Base URL of the downstream order microservice.
+    url: http://localhost:8082
+  user:
+    # Base URL of the downstream user microservice.
+    url: http://localhost:8083
+
+# ============================================================================
+# Spring Cloud Gateway global settings
+#
+# These settings apply globally across all routes. Individual routes may
+# override them via their own filter chains (see GatewayRoutesConfig.java).
+# ============================================================================
+spring:
+  cloud:
+    gateway:
+      # Default filters applied to EVERY route.
+      # These are in addition to any route-specific filters.
+      default-filters:
+        # Adds X-Response-Time to every response (useful for performance monitoring).
+        - name: AddResponseHeader
+          args:
+            name: X-Response-Time
+            value: "#{T(java.time.Instant).now().toString()}"
+
+      # Global CORS configuration.
+      # Allows web frontends (e.g. a React app on localhost:3000) to call the
+      # gateway without the browser blocking the request with a CORS error.
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+
+# ============================================================================
+# Spring Boot Actuator
+#
+# The /actuator/gateway/routes endpoint is especially useful — it shows all
+# configured routes with predicates and filters, making the gateway's routing
+# table visible at runtime.
+# ============================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expose: health, info, and the gateway-specific routes endpoint.
+        include: health, info, gateway
+  endpoint:
+    health:
+      show-details: always
+    gateway:
+      # Enable the gateway Actuator endpoint (/actuator/gateway/routes).
+      enabled: true
+
+# ============================================================================
+# Logging
+#
+# Reduce verbose Spring Cloud Gateway internals to WARN while keeping
+# our own application classes at DEBUG for educational visibility.
+# ============================================================================
+logging:
+  level:
+    # Suppress verbose reactor-netty connection pool messages
+    reactor.netty: WARN
+    # Suppress Spring Cloud Gateway route matching DEBUG spam
+    org.springframework.cloud.gateway: INFO
+    # Keep our application classes at DEBUG so students can see filter execution
+    com.example.springcloudgateway: DEBUG
