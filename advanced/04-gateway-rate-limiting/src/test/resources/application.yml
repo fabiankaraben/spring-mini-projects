@@ -1,0 +1,59 @@
+# ============================================================================
+# application.yml — Test configuration for the Gateway Rate Limiting project
+#
+# This file overrides application.yml during test execution.
+# Key differences from the main config:
+#   - Port 0: Spring Boot assigns a random free port, avoiding conflicts.
+#   - Redis host/port: overridden by tests via @DynamicPropertySource
+#     to point at the Redis Testcontainer instance.
+#   - Downstream service URLs: overridden by tests via @DynamicPropertySource
+#     to point at WireMock Testcontainer instances.
+#   - Logging: reduced to ERROR for Netty/reactor to keep test output clean.
+# ============================================================================
+
+spring:
+  application:
+    name: gateway-rate-limiting
+
+  data:
+    redis:
+      # These will be overridden by @DynamicPropertySource in integration tests
+      # to point at the Redis Testcontainer's mapped port.
+      host: localhost
+      port: 6379
+
+server:
+  # Port 0 = random free port assigned by the OS at test startup.
+  # This prevents port conflicts when tests run in parallel or alongside
+  # a running development gateway.
+  port: 0
+
+# Default downstream URIs for tests — overridden per test class via
+# @DynamicPropertySource once WireMock containers are started.
+services:
+  product:
+    url: http://localhost:9001
+  order:
+    url: http://localhost:9002
+  user:
+    url: http://localhost:9003
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, gateway
+  endpoint:
+    health:
+      show-details: always
+    gateway:
+      enabled: true
+
+logging:
+  level:
+    # Suppress noisy Netty/Reactor logs during test runs
+    reactor.netty: ERROR
+    io.netty: ERROR
+    org.springframework.cloud.gateway: WARN
+    # Keep our application code at INFO so test output is readable
+    com.example.gatewaylimiting: INFO

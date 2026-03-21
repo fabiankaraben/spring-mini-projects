@@ -1,0 +1,19 @@
+{
+  "id": "c2d3e4f5-a6b7-8901-cdef-ab2345678902",
+  "name": "GET /orders — returns list of orders",
+  "request": {
+    "method": "GET",
+    "urlPattern": "/orders.*"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": [
+      { "id": "ORDER-001", "product": "Laptop",   "quantity": 1, "status": "SHIPPED"   },
+      { "id": "ORDER-002", "product": "Mouse",    "quantity": 2, "status": "PENDING"   },
+      { "id": "ORDER-003", "product": "Monitor",  "quantity": 1, "status": "DELIVERED" }
+    ]
+  }
+}

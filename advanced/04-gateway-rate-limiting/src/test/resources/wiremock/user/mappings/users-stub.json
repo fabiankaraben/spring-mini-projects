@@ -1,0 +1,19 @@
+{
+  "id": "d3e4f5a6-b7c8-9012-defa-bc3456789013",
+  "name": "GET /users — returns list of users",
+  "request": {
+    "method": "GET",
+    "urlPattern": "/users.*"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": [
+      { "id": 1, "username": "alice",   "email": "alice@example.com",   "role": "ADMIN" },
+      { "id": 2, "username": "bob",     "email": "bob@example.com",     "role": "USER"  },
+      { "id": 3, "username": "charlie", "email": "charlie@example.com", "role": "USER"  }
+    ]
+  }
+}

@@ -1,0 +1,96 @@
+# ============================================================================
+# application.yml — Gateway Rate Limiting configuration
+#
+# This file configures the API Gateway with Redis-based rate limiting.
+# Key concerns:
+#   1. Application name for logging and Actuator info.
+#   2. Server port (8080 — the public-facing gateway port).
+#   3. Redis connection settings (required for the rate limiter).
+#   4. Downstream service URIs (overridable per environment).
+#   5. Actuator endpoints for health and route inspection.
+#   6. Logging levels for visibility during development.
+#
+# Routes are defined programmatically in GatewayRoutesConfig.java.
+# ============================================================================
+
+spring:
+  application:
+    # The application name appears in logs, Actuator /info, and service registries.
+    name: gateway-rate-limiting
+
+  # ============================================================================
+  # Redis connection configuration
+  #
+  # Spring Data Redis (Reactive) uses Lettuce as the underlying client.
+  # The RequestRateLimiter filter connects to Redis here to execute the
+  # Token Bucket Lua script on every incoming request.
+  #
+  # In Docker Compose, SPRING_REDIS_HOST is overridden to "redis" (the
+  # container service name). Locally, it defaults to localhost:6379.
+  # ============================================================================
+  data:
+    redis:
+      # Redis server hostname. Override via SPRING_DATA_REDIS_HOST env var.
+      host: ${SPRING_REDIS_HOST:localhost}
+      # Redis default port. Override via SPRING_DATA_REDIS_PORT env var.
+      port: ${SPRING_REDIS_PORT:6379}
+
+server:
+  # Port 8080: the public-facing port that clients call.
+  # All traffic enters here and the gateway routes it to downstream services.
+  port: 8080
+
+# ============================================================================
+# Downstream service URIs
+#
+# These values are injected into GatewayRoutesConfig.java via @Value.
+# Override per environment using:
+#   - Environment variables: SERVICES_PRODUCT_URL, SERVICES_ORDER_URL, etc.
+#   - Docker Compose environment: section in docker-compose.yml
+#   - System properties: -Dservices.product.url=http://...
+# ============================================================================
+services:
+  product:
+    # Base URL of the downstream product microservice.
+    url: http://localhost:8081
+  order:
+    # Base URL of the downstream order microservice.
+    url: http://localhost:8082
+  user:
+    # Base URL of the downstream user microservice.
+    url: http://localhost:8083
+
+# ============================================================================
+# Spring Boot Actuator
+#
+# Expose health, info, and the gateway-specific routes endpoint.
+# The /actuator/gateway/routes endpoint shows all configured routes with
+# their predicates, filters (including rate limiter settings), and URIs.
+# ============================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, gateway
+  endpoint:
+    health:
+      # Show full health details including Redis connectivity status.
+      show-details: always
+    gateway:
+      # Enable /actuator/gateway/routes to inspect configured routes.
+      enabled: true
+
+# ============================================================================
+# Logging
+#
+# Keep our application classes at DEBUG for educational visibility.
+# Suppress verbose Netty and Spring Cloud Gateway internals to reduce noise.
+# ============================================================================
+logging:
+  level:
+    # Suppress reactor-netty connection pool DEBUG spam.
+    reactor.netty: WARN
+    # Suppress Spring Cloud Gateway route matching DEBUG spam.
+    org.springframework.cloud.gateway: INFO
+    # Keep our application classes at DEBUG so the rate limiting flow is visible.
+    com.example.gatewaylimiting: DEBUG

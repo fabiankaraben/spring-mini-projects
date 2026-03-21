@@ -1,0 +1,183 @@
+# ============================================================================
+# Docker Compose file for the Gateway Rate Limiting mini-project
+#
+# This file defines a five-service stack:
+#   1. redis           — the Redis instance that stores Token Bucket state
+#   2. product-service — a WireMock stub acting as a downstream product API
+#   3. order-service   — a WireMock stub acting as a downstream order API
+#   4. user-service    — a WireMock stub acting as a downstream user API
+#   5. api-gateway     — the Spring Cloud Gateway (built from local Dockerfile)
+#
+# The gateway applies Redis-backed rate limiting before routing traffic:
+#   /api/products/** → product-service:8080/products/**  (5 req/s, burst 10)
+#   /api/orders/**   → order-service:8080/orders/**      (3 req/s, burst 5)
+#   /api/users/**    → user-service:8080/users/**        (10 req/s, burst 20)
+#
+# When the rate limit is exceeded, the gateway returns HTTP 429 Too Many Requests
+# without forwarding the request to the downstream service.
+#
+# Usage:
+#   docker compose up --build       # Build gateway image and start all services
+#   docker compose up --build -d    # Same, but in detached (background) mode
+#   docker compose down             # Stop and remove containers
+#   docker compose logs -f          # Follow logs from all services
+#   docker compose logs -f api-gateway  # Follow logs only from the gateway
+#
+# Accessing services after startup:
+#   Gateway:                  http://localhost:8080
+#   Products (via gateway):   http://localhost:8080/api/products
+#   Orders (via gateway):     http://localhost:8080/api/orders
+#   Users (via gateway):      http://localhost:8080/api/users
+#   Gateway status:           http://localhost:8080/gateway/status
+#   Rate limit config:        http://localhost:8080/gateway/rate-limits
+#   Actuator health:          http://localhost:8080/actuator/health
+#   Actuator gateway routes:  http://localhost:8080/actuator/gateway/routes
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Redis — Token Bucket state storage
+  #
+  # Redis is the central rate limit counter store. Spring Cloud Gateway's
+  # RequestRateLimiter filter executes a Lua script atomically on Redis to
+  # implement the Token Bucket algorithm.
+  #
+  # Each unique client IP gets its own bucket key in Redis:
+  #   "request_rate_limiter.{<ip>}.tokens"    — current token count
+  #   "request_rate_limiter.{<ip>}.timestamp" — last refill timestamp
+  #
+  # Using redis:7-alpine keeps the image small. No persistence (no volume)
+  # is configured here because rate limit counters are transient by nature.
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      # Expose Redis on the default host port 6379 for direct inspection with
+      # redis-cli if needed: redis-cli -h localhost -p 6379 keys '*'
+      - "6379:6379"
+    healthcheck:
+      # Use the built-in redis-cli PING command to verify Redis is ready.
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # Product Service stub (WireMock)
+  #
+  # Simulates the downstream product microservice. WireMock reads stub mappings
+  # from /home/wiremock/mappings/ at startup and serves them as HTTP responses.
+  #
+  # The gateway strips /api from the path before forwarding (StripPrefix=1),
+  # so this WireMock must stub /products/** (not /api/products/**).
+  # --------------------------------------------------------------------------
+  product-service:
+    image: wiremock/wiremock:3.9.2
+    container_name: product-service
+    volumes:
+      # Mount the product stub mappings from the docker/ directory.
+      - ./docker/wiremock/product/mappings:/home/wiremock/mappings:ro
+    ports:
+      # Map to host port 8081 for direct inspection if needed.
+      - "8081:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/__admin/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # Order Service stub (WireMock)
+  #
+  # Simulates the downstream order microservice.
+  # The gateway routes /api/orders/** → /orders/** (StripPrefix=1).
+  # --------------------------------------------------------------------------
+  order-service:
+    image: wiremock/wiremock:3.9.2
+    container_name: order-service
+    volumes:
+      - ./docker/wiremock/order/mappings:/home/wiremock/mappings:ro
+    ports:
+      - "8082:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/__admin/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # User Service stub (WireMock)
+  #
+  # Simulates the downstream user microservice.
+  # The gateway routes /api/users/** → /users/** (StripPrefix=1).
+  # --------------------------------------------------------------------------
+  user-service:
+    image: wiremock/wiremock:3.9.2
+    container_name: user-service
+    volumes:
+      - ./docker/wiremock/user/mappings:/home/wiremock/mappings:ro
+    ports:
+      - "8083:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/__admin/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # API Gateway (Spring Cloud Gateway with Redis rate limiting)
+  #
+  # Built from the multi-stage Dockerfile in this project root.
+  # Routes all incoming traffic through Redis-backed rate limiting filters
+  # before forwarding to the appropriate downstream service.
+  #
+  # Environment variables override the default application.yml values:
+  #   SPRING_REDIS_HOST: "redis" — the Docker Compose service name for Redis.
+  #     Inside the Docker network, containers reach each other by service name.
+  #   SERVICES_*_URL: Docker Compose DNS names for each WireMock stub.
+  # --------------------------------------------------------------------------
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    ports:
+      # Map host port 8080 to container port 8080.
+      # All client traffic enters here and is routed to downstream services.
+      - "8080:8080"
+    environment:
+      # Override Redis host to use the Docker Compose service name "redis".
+      # Docker Compose creates a default bridge network and resolves service
+      # names to container IP addresses automatically.
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      # Override downstream service URIs to use Docker Compose DNS names.
+      # WireMock listens on 8080 inside its container (not the mapped host port).
+      SERVICES_PRODUCT_URL: http://product-service:8080
+      SERVICES_ORDER_URL: http://order-service:8080
+      SERVICES_USER_URL: http://user-service:8080
+    depends_on:
+      # Wait for all dependencies to be healthy before starting the gateway.
+      redis:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
