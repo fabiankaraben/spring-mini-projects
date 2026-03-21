@@ -1,0 +1,54 @@
+# ============================================================================
+# application.yml — Test configuration for the Distributed Tracing project
+#
+# Overrides the main application.yml during test execution.
+# Key differences:
+#   - Port 0: Spring assigns a random free port, avoiding conflicts.
+#   - Zipkin endpoint: set to a placeholder; integration tests override it
+#     via @DynamicPropertySource to point at a Testcontainer Zipkin instance.
+#   - Sampling probability: 1.0 so every test request is traced.
+#   - Feign URL: overridden by @DynamicPropertySource to use the test server port.
+#   - Logging: reduced noise during test output.
+# ============================================================================
+
+spring:
+  application:
+    name: distributed-tracing-sleuth
+
+server:
+  # Port 0 = random free port assigned by the OS at test startup.
+  # Prevents port conflicts when tests run alongside a running application.
+  port: 0
+
+inventory:
+  service:
+    # Placeholder — overridden by @DynamicPropertySource in integration tests
+    # to point at the actual test server's random port.
+    url: http://localhost:9999
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+  endpoint:
+    health:
+      show-details: always
+  tracing:
+    # Always trace during tests so span assertions work reliably.
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      # Placeholder — overridden by @DynamicPropertySource in integration tests
+      # to point at the Zipkin Testcontainer's mapped port.
+      endpoint: http://localhost:9411/api/v2/spans
+
+logging:
+  level:
+    # Keep our application code visible for debugging test failures
+    com.example.tracing: INFO
+    # Suppress noisy Feign/Spring logs during test runs
+    org.springframework.cloud.openfeign: WARN
+    feign: WARN
+    org.springframework.web: WARN

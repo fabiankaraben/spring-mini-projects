@@ -1,0 +1,91 @@
+# ============================================================================
+# application.yml — Distributed Tracing Sleuth configuration
+#
+# Key configuration concerns:
+#   1. Application name — appears in logs, Actuator /info, and Zipkin service name.
+#   2. Server port (8080).
+#   3. Micrometer Tracing — sampling probability and Zipkin export endpoint.
+#   4. Feign client — URL for the inventory service (self-call in this project).
+#   5. Actuator endpoints for health and metrics inspection.
+#   6. Logging pattern — includes traceId and spanId from MDC in every log line.
+#
+# Tracing pipeline summary:
+#   Request arrives → Brave creates Span → Span IDs added to MDC →
+#   Application code can read/enrich Span → Span ended → Reporter sends to Zipkin.
+# ============================================================================
+
+spring:
+  application:
+    # The application name is used by Micrometer Tracing as the "service name" tag
+    # in Zipkin. All spans from this application will appear under this name in the
+    # Zipkin service selector dropdown.
+    name: distributed-tracing-sleuth
+
+server:
+  # Port 8080: the application listens here for both client requests and the
+  # Feign client's self-calls (InventoryClient → InventoryController).
+  port: 8080
+
+# ============================================================================
+# Inventory service URL
+#
+# The Feign client InventoryClient calls this URL to reach InventoryController.
+# In this mini-project both run in the same JVM, so the URL is localhost:8080.
+# In Docker Compose, this is overridden via the INVENTORY_SERVICE_URL env var
+# to use the container's service name.
+# ============================================================================
+inventory:
+  service:
+    url: ${INVENTORY_SERVICE_URL:http://localhost:8080}
+
+# ============================================================================
+# Management / Actuator
+#
+# Exposes health, info, metrics, and tracing-related endpoints.
+# The /actuator/health endpoint is used by the Docker healthcheck.
+# ============================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expose health, info, and metrics so trace/span counters are visible.
+        include: health, info, metrics
+  endpoint:
+    health:
+      # Show full details including downstream service connectivity.
+      show-details: always
+  tracing:
+    # Sampling probability: 1.0 = 100% of requests are traced and exported.
+    # In production, 0.1 (10%) is a common default to reduce overhead.
+    # Set to 1.0 here so every request appears in Zipkin during development.
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      # Zipkin HTTP endpoint where spans are exported.
+      # In Docker Compose this is overridden to http://zipkin:9411/api/v2/spans
+      # via the MANAGEMENT_ZIPKIN_TRACING_ENDPOINT env var.
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+
+# ============================================================================
+# Logging
+#
+# The logging pattern includes %X{traceId} and %X{spanId} — these are MDC keys
+# that Brave's MDCScopeDecorator populates automatically for every traced request.
+#
+# Example log output:
+#   2024-01-15 10:23:45.123  INFO [distributed-tracing-sleuth,abc123def456,111222333] ...
+#   ───────────────────────────────────────────────────────────────────────────────────
+#   The bracketed part: [appName,traceId,spanId]
+# ============================================================================
+logging:
+  pattern:
+    # Include traceId and spanId in every log line for correlation with Zipkin.
+    # The %X{traceId} and %X{spanId} are MDC keys populated by Brave.
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
+  level:
+    # Keep our application classes at DEBUG so tracing events are visible.
+    com.example.tracing: DEBUG
+    # Suppress noisy Feign/Spring internals
+    org.springframework.cloud.openfeign: INFO
+    feign: INFO

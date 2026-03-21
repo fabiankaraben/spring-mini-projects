@@ -1,0 +1,112 @@
+# ============================================================================
+# Docker Compose file for the Distributed Tracing Sleuth mini-project
+#
+# This file defines a two-service stack:
+#   1. zipkin  — the Zipkin distributed tracing server (UI + storage + API)
+#   2. app     — the Spring Boot application (built from local Dockerfile)
+#
+# Tracing flow in Docker Compose:
+#   HTTP Request → app:8080 → Brave creates Span → Reporter sends to zipkin:9411
+#   The Zipkin UI at http://localhost:9411 shows the complete trace waterfall.
+#
+# Usage:
+#   docker compose up --build       # Build app image and start all services
+#   docker compose up --build -d    # Same, but in detached (background) mode
+#   docker compose down             # Stop and remove containers
+#   docker compose logs -f          # Follow logs from all services
+#   docker compose logs -f app      # Follow logs only from the Spring Boot app
+#
+# Accessing services after startup:
+#   Application:        http://localhost:8080
+#   Zipkin UI:          http://localhost:9411
+#   Actuator health:    http://localhost:8080/actuator/health
+#   Trace info:         http://localhost:8080/trace/current
+#   Products:           http://localhost:8080/products
+#   Orders:             POST http://localhost:8080/orders
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Zipkin — distributed tracing backend
+  #
+  # Zipkin receives span data exported by the Spring Boot application via HTTP
+  # (POST /api/v2/spans). It stores the spans in-memory and provides a UI for
+  # searching and visualizing traces.
+  #
+  # Why openzipkin/zipkin:3?
+  #   - Official, actively maintained image.
+  #   - Multi-arch manifest: supports linux/amd64 and linux/arm64 (Apple Silicon).
+  #   - The :3 tag pins to the Zipkin 3.x release train (current stable).
+  #
+  # Storage: in-memory (default). Traces are lost when the container restarts.
+  # For persistent storage, configure STORAGE_TYPE=elasticsearch or
+  # STORAGE_TYPE=mysql and add the corresponding service to this file.
+  # --------------------------------------------------------------------------
+  zipkin:
+    image: openzipkin/zipkin:3
+    container_name: zipkin
+    ports:
+      # Expose the Zipkin HTTP API and UI on host port 9411.
+      # UI:  http://localhost:9411
+      # API: http://localhost:9411/api/v2/spans  (span ingestion endpoint)
+      - "9411:9411"
+    healthcheck:
+      # Zipkin exposes /health (returns HTTP 200 when ready)
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9411/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # --------------------------------------------------------------------------
+  # Spring Boot Application — distributed-tracing-sleuth
+  #
+  # Built from the multi-stage Dockerfile in this project root.
+  # Generates trace IDs and span IDs for every incoming HTTP request and
+  # exports them asynchronously to the Zipkin service.
+  #
+  # Environment variables override application.yml defaults:
+  #   INVENTORY_SERVICE_URL: points the Feign client at this container itself,
+  #     so the OrderService→InventoryService call goes through the real HTTP stack
+  #     inside the Docker network.
+  #   ZIPKIN_ENDPOINT: points the Brave reporter at the zipkin service by
+  #     Docker Compose DNS name.
+  #   MANAGEMENT_TRACING_SAMPLING_PROBABILITY=1.0: trace every request (100%).
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: distributed-tracing-sleuth
+    ports:
+      # Map host port 8080 to container port 8080
+      - "8080:8080"
+    environment:
+      # Point the Feign InventoryClient at this container itself (self-call).
+      # Inside the Docker network the container is reachable by its service name "app".
+      INVENTORY_SERVICE_URL: http://app:8080
+
+      # Point the Brave/Zipkin reporter at the zipkin service.
+      # "zipkin" resolves to the Zipkin container's IP within the Docker network.
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+
+      # Trace 100% of requests so all spans appear in Zipkin during the demo.
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+
+      # Set the Spring log level pattern to include traceId/spanId in every log line.
+      LOGGING_LEVEL_COM_EXAMPLE_TRACING: DEBUG
+    depends_on:
+      # Wait for Zipkin to be healthy before starting the application.
+      # This prevents the initial span export batch from failing on connection refused.
+      zipkin:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
