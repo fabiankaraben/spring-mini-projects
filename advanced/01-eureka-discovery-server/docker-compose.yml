@@ -1,0 +1,61 @@
+# ============================================================================
+# Docker Compose file for the Eureka Discovery Server mini-project
+#
+# This file defines the production stack: a single service — the Spring Boot
+# Eureka Discovery Server. Unlike other mini-projects that require external
+# services (databases, message brokers), the Eureka server is self-contained.
+#
+# Usage:
+#   docker compose up --build       # Build and start the Eureka server
+#   docker compose up --build -d    # Same, but in detached (background) mode
+#   docker compose down             # Stop and remove containers
+#
+# Accessing the server after startup:
+#   - Eureka Dashboard:  http://localhost:8761/
+#   - Eureka REST API:   http://localhost:8761/eureka/apps
+#   - Actuator health:   http://localhost:8761/actuator/health
+#   - Registry summary:  http://localhost:8761/registry/summary
+#   - All instances:     http://localhost:8761/registry/instances
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Integration tests start the full Spring Boot context in-process.
+# Run tests with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Eureka Discovery Server service
+  #
+  # Built from the multi-stage Dockerfile in the project root.
+  # Exposes port 8761, which is the standard Eureka server port and the default
+  # that all Spring Cloud Eureka clients look for.
+  # --------------------------------------------------------------------------
+  eureka-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eureka-discovery-server
+    ports:
+      # Map host port 8761 to container port 8761.
+      # This is the standard Eureka port; Eureka clients default to:
+      #   eureka.client.serviceUrl.defaultZone=http://localhost:8761/eureka/
+      - "8761:8761"
+    environment:
+      # Override the hostname so the Eureka server registers itself correctly
+      # inside Docker. When other containers on the same Docker network want
+      # to connect to this server, they use the service name "eureka-server"
+      # as the hostname (Docker Compose DNS).
+      EUREKA_INSTANCE_HOSTNAME: eureka-server
+      # Self-preservation disabled in Docker Compose dev environment for
+      # faster feedback when services deregister.
+      EUREKA_SERVER_ENABLE_SELF_PRESERVATION: "false"
+    healthcheck:
+      # Probe the Spring Boot Actuator health endpoint.
+      # The healthcheck ensures `docker compose up` reports "healthy" only
+      # after the Eureka server is fully initialised and accepting registrations.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8761/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

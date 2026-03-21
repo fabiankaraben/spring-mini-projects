@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.example</groupId>
+	<artifactId>eureka-discovery-server</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>eureka-discovery-server</name>
+	<description>Spring Boot mini-project setting up a Spring Cloud Netflix Eureka service registry. Services register themselves here and discover other services by name instead of hard-coded URLs.</description>
+
+	<properties>
+		<java.version>21</java.version>
+		<!-- Spring Cloud BOM version aligned with Spring Boot 3.4.x -->
+		<spring-cloud.version>2024.0.1</spring-cloud.version>
+		<!-- Testcontainers BOM version — pins all Testcontainers module versions in sync -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+
+	<dependencies>
+		<!--
+			Spring Boot Actuator: exposes management endpoints such as /actuator/health
+			and /actuator/info. The Eureka dashboard relies on the health endpoint to
+			report the server's own status.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!--
+			Spring Cloud Netflix Eureka Server: this is the core dependency that turns
+			this Spring Boot application into a Eureka service registry.
+			When @EnableEurekaServer is on the main class, the application starts an
+			embedded Eureka server that:
+			  - Accepts service registrations (POST /eureka/apps/{appId})
+			  - Answers service queries   (GET  /eureka/apps)
+			  - Serves a web dashboard    (GET  /)
+		-->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!--
+			Spring Boot Test: pulls in JUnit 5, AssertJ, Mockito, MockMvc and all
+			the Spring test infrastructure required for unit and integration tests.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers JUnit 5 integration: provides the @Testcontainers
+			class-level annotation and the @Container field annotation that manage
+			Docker container lifecycle alongside the JUnit 5 test lifecycle.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers core module: needed for GenericContainer which lets us
+			spin up the Eureka server itself inside a Docker container for full
+			integration testing without requiring a pre-running server.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<!--
+		Manage all Spring Cloud module versions through the BOM (Bill of Materials).
+		This ensures all spring-cloud-* artefacts resolve to a compatible set of
+		versions, aligned with Spring Boot 3.4.x.
+	-->
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-dependencies</artifactId>
+				<version>${spring-cloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<!-- Manage all Testcontainers module versions via the BOM so they stay in sync -->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin: packages the application as an executable fat-jar -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+			<!--
+				Maven Surefire Plugin: configures test execution for Java 21+.
+
+				argLine breakdown:
+				  -XX:+EnableDynamicAgentLoading  - silences Mockito/ByteBuddy agent warnings
+				  -Xshare:off                     - disables class-data sharing (avoids conflicts)
+				  -Dnet.bytebuddy.experimental    - required on Java 25+; harmless on Java 21-24
+				  add-opens                       - grants ByteBuddy/Mockito deep reflection access
+
+				DOCKER_API_VERSION=1.44:
+				  Docker Desktop 29+ rejects the legacy v1.24 API path that docker-java uses by
+				  default. Setting 1.44 here (and in docker-java.properties on the test classpath)
+				  ensures Testcontainers works correctly on Docker Desktop 29+.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off -Dnet.bytebuddy.experimental=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<!-- Ensures docker-java uses API v1.44 (Docker Desktop 29+ requires this) -->
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

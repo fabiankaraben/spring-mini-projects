@@ -1,0 +1,98 @@
+# ============================================================================
+# application.yml — Eureka Discovery Server configuration
+#
+# This file configures the Spring Boot application that acts as a Eureka
+# service registry. The key concern is to configure the server so that it
+# does NOT try to register itself as a client with another Eureka server
+# (since this IS the registry).
+# ============================================================================
+
+spring:
+  application:
+    # The application name is registered in the Eureka dashboard.
+    # Keep it descriptive so it is recognisable in a multi-server setup.
+    name: eureka-discovery-server
+
+server:
+  # Port on which the Eureka server listens.
+  # Eureka clients (microservices) will point their eureka.client.serviceUrl.defaultZone
+  # configuration to http://<host>:8761/eureka/
+  port: 8761
+
+eureka:
+  instance:
+    # The hostname used when this server registers its own instance info.
+    # "localhost" is fine for development and Docker Compose setups.
+    hostname: localhost
+
+  client:
+    # -------------------------------------------------------------------------
+    # Standalone mode: disable self-registration and peer-discovery.
+    #
+    # By default, every Eureka-aware application (including the server itself)
+    # tries to register as a client and fetch the registry from peers.
+    # Since this IS the registry (and there are no peers in our single-server
+    # setup), both behaviours must be turned off to prevent startup errors.
+    # -------------------------------------------------------------------------
+
+    # Do NOT register this server as a service in itself.
+    # In a clustered (peer-aware) setup you would set this to true so that
+    # other Eureka servers can discover this one.
+    register-with-eureka: false
+
+    # Do NOT fetch the registry from other Eureka servers.
+    # There are no peer servers in our standalone setup.
+    fetch-registry: false
+
+    # Service URL that Eureka clients would use to reach this server.
+    # For a standalone server, it points back to itself (for internal use).
+    service-url:
+      defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
+
+  server:
+    # -------------------------------------------------------------------------
+    # Self-preservation mode
+    #
+    # Eureka uses a heartbeat mechanism: clients send a heartbeat every 30 s.
+    # If the server does not receive enough heartbeats it assumes a network
+    # partition (not client failures) and stops evicting instances — this is
+    # called "self-preservation".
+    #
+    # In production: keep this ENABLED (true) to survive brief network hiccups.
+    # In development/testing: disable it so stale registrations are evicted
+    # quickly, avoiding confusing dashboard states.
+    # -------------------------------------------------------------------------
+    enable-self-preservation: false
+
+    # How long (ms) to wait before evicting an instance that stopped sending
+    # heartbeats. Default is 60 000 ms; lowered here for faster feedback in dev.
+    eviction-interval-timer-in-ms: 5000
+
+# ============================================================================
+# Spring Boot Actuator
+#
+# Expose the health and info endpoints so that Eureka clients and monitoring
+# tools can check whether the registry itself is healthy.
+# ============================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: always
+
+# ============================================================================
+# Logging
+#
+# Reduce the noise from Eureka internals (they are very chatty by default)
+# while keeping application-level logging at INFO so you can see registrations.
+# ============================================================================
+logging:
+  level:
+    # Suppress verbose Eureka peer-sync and heartbeat DEBUG messages
+    com.netflix.eureka: WARN
+    com.netflix.discovery: WARN
+    # Keep our own application classes at INFO level
+    com.example.eurekadiscoveryserver: INFO

@@ -1,0 +1,33 @@
+# ============================================================================
+# application.yml for tests
+#
+# Overrides selected properties from src/main/resources/application.yml for
+# the test environment. Spring Boot merges this file with the main config,
+# with test values taking precedence.
+#
+# Key changes for tests:
+#   - server.port = 0: lets Spring Boot pick a random free port automatically,
+#     avoiding port conflicts when running tests in CI or parallel builds.
+#   - Self-preservation is already false in main config (good for tests).
+#   - Logging is silenced further to keep test output clean.
+# ============================================================================
+
+server:
+  # port: 0 instructs Spring Boot to choose any available port at runtime.
+  # The actual port is injected via @LocalServerPort in test classes.
+  port: 0
+
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    # Keep registration and peer-discovery disabled in tests
+    register-with-eureka: false
+    fetch-registry: false
+
+# Reduce test output noise from Eureka internals
+logging:
+  level:
+    com.netflix.eureka: ERROR
+    com.netflix.discovery: ERROR
+    org.springframework.cloud.netflix.eureka: ERROR
