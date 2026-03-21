@@ -1,0 +1,40 @@
+services:
+  # ── Zipkin Server ─────────────────────────────────────────────────────────
+  zipkin:
+    # openzipkin/zipkin:3 is the official multi-architecture image that works
+    # on both AMD64 and ARM64 (Apple Silicon). It bundles the Zipkin collector,
+    # storage (in-memory by default), and the web UI all in one container.
+    image: openzipkin/zipkin:3
+    container_name: zipkin-server
+    ports:
+      # 9411 is Zipkin's default port for both the HTTP collector API
+      # (/api/v2/spans) and the browser UI (http://localhost:9411/zipkin/).
+      - "9411:9411"
+    healthcheck:
+      # The /health endpoint returns 200 OK when Zipkin is fully initialised.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9411/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Spring Boot application ───────────────────────────────────────────────
+  app:
+    build: .
+    container_name: zipkin-integration-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      zipkin:
+        # Wait until Zipkin passes its healthcheck before starting the app.
+        # Without this, the app might start before Zipkin is ready to accept
+        # spans, causing connection-refused errors in the reporter.
+        condition: service_healthy
+    environment:
+      # Override the Zipkin endpoint so the app sends spans to the "zipkin"
+      # service on the internal Docker Compose network rather than localhost.
+      # The placeholder ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+      # in application.yml picks this up automatically.
+      - ZIPKIN_ENDPOINT=http://zipkin:9411/api/v2/spans
+      # Trace 100% of requests in the Docker environment for easy demonstration.
+      - SPRING_TRACING_SAMPLING_PROBABILITY=1.0
+      - MANAGEMENT_TRACING_SAMPLING_PROBABILITY=1.0

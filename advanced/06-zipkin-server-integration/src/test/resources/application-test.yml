@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: zipkin-integration-test
+
+  # ── Tracing – disabled for tests ──────────────────────────────────────────
+  # Disable Zipkin export during unit tests so tests do not require a
+  # running Zipkin server. Micrometer Tracing itself still works (uses a
+  # NOOP reporter), so services under test can still create and close spans
+  # without errors.
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
+
+  tracing:
+    # Set to 0.0 for unit tests so no spans are sampled/exported.
+    # Integration tests override this via @DynamicPropertySource.
+    sampling:
+      probability: 0.0
+
+# ── Server ────────────────────────────────────────────────────────────────
+server:
+  port: 0
+
+# ── Logging – quieter during tests ────────────────────────────────────────
+logging:
+  level:
+    com.example.zipkinintegration: INFO
+    io.micrometer.tracing: WARN
+    zipkin2.reporter: WARN

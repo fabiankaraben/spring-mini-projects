@@ -1,0 +1,53 @@
+spring:
+  application:
+    # Application name appears as the service name in Zipkin's service list.
+    # All traces from this service will be grouped under "zipkin-integration".
+    name: zipkin-integration
+
+  # ── Micrometer Tracing / Zipkin ───────────────────────────────────────────
+  zipkin:
+    tracing:
+      # The URL of the Zipkin HTTP collector endpoint.
+      # When running via Docker Compose, "zipkin" resolves to the Zipkin
+      # container on the internal Docker network.
+      # When running locally, use http://localhost:9411/api/v2/spans.
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+
+  # ── Tracing sampling ──────────────────────────────────────────────────────
+  tracing:
+    # Sampling probability: 1.0 means 100% of requests are traced and
+    # exported to Zipkin. In production, reduce this (e.g. 0.1 = 10%) to
+    # avoid overwhelming the Zipkin server with data.
+    sampling:
+      probability: 1.0
+
+# ── Server ────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+# ── Spring Boot Actuator ──────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expose health and info endpoints so Docker Compose healthchecks work.
+        # "tracing" exposes the current trace context via the Actuator.
+        include: health,info,metrics
+  tracing:
+    # Mirror the sampling probability here so Actuator-instrumented operations
+    # are also traced at 100% during development.
+    sampling:
+      probability: 1.0
+
+# ── Logging ───────────────────────────────────────────────────────────────
+logging:
+  pattern:
+    # Adds [traceId spanId] to every log line when a trace is active.
+    # This is the standard Micrometer Tracing MDC pattern.
+    # Example: 2024-01-01 12:00:00.000 INFO [zipkin-integration,<traceId>,<spanId>]
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
+  level:
+    # Show tracing-related logs at DEBUG level for educational visibility
+    io.micrometer.tracing: DEBUG
+    zipkin2.reporter: DEBUG
+    com.example.zipkinintegration: DEBUG
