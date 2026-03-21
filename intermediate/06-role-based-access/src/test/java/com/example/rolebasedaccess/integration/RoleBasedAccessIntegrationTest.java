@@ -100,10 +100,6 @@ class RoleBasedAccessIntegrationTest {
     @Autowired
     private UserRepository userRepository;
 
-    /** Password encoder used to hash passwords when seeding test users. */
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-
     // ── Shared token state ────────────────────────────────────────────────────
 
     /**

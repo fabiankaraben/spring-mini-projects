@@ -101,12 +101,6 @@ class MethodLevelSecurityIntegrationTest {
     @Autowired
     private UserRepository userRepository;
 
-    @Autowired
-    private DocumentRepository documentRepository;
-
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-
     // ── Shared test state ─────────────────────────────────────────────────────
 
     /**

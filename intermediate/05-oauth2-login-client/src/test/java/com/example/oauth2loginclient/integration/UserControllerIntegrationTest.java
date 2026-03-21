@@ -78,6 +78,7 @@ class UserControllerIntegrationTest {
      * datasource bean is initialized).</p>
      */
     @Container
+    @SuppressWarnings("resource")
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("oauth2logintest")
             .withUsername("test")

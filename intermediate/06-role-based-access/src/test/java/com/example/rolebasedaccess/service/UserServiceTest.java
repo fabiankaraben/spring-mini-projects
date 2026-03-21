@@ -4,7 +4,6 @@ import com.example.rolebasedaccess.domain.Role;
 import com.example.rolebasedaccess.domain.User;
 import com.example.rolebasedaccess.dto.RegisterRequest;
 import com.example.rolebasedaccess.repository.UserRepository;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
