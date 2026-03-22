@@ -1,0 +1,136 @@
+# ============================================================================
+# Docker Compose file for the OAuth2 Authorization Server mini-project
+#
+# This file defines a two-service stack:
+#   1. postgres          — PostgreSQL 16 database for persisting OAuth2 client
+#                          registrations, issued authorizations, and consent records.
+#   2. auth-server       — The Spring Boot OAuth2 Authorization Server, built
+#                          from the local multi-stage Dockerfile.
+#
+# How the services interact:
+#   - The auth-server connects to postgres using the Docker Compose service name
+#     "postgres" as the hostname (Docker's built-in DNS resolution).
+#   - OAuth2 clients and tokens are persisted to the "authserver" database.
+#   - The auth-server exposes port 9000 for all OAuth2 and OIDC traffic.
+#
+# Usage:
+#   docker compose up --build       # Build auth-server image and start all services
+#   docker compose up --build -d    # Same, in detached (background) mode
+#   docker compose down             # Stop and remove containers
+#   docker compose down -v          # Also remove the named volume (wipes DB data)
+#   docker compose logs -f          # Follow logs from all services
+#   docker compose logs -f auth-server  # Follow auth-server logs only
+#
+# Endpoints after startup:
+#   Token endpoint:        POST http://localhost:9000/oauth2/token
+#   JWK Set endpoint:      GET  http://localhost:9000/oauth2/jwks
+#   OIDC discovery:        GET  http://localhost:9000/.well-known/openid-configuration
+#   Token introspection:   POST http://localhost:9000/oauth2/introspect
+#   Token revocation:      POST http://localhost:9000/oauth2/revoke
+#   Server status:         GET  http://localhost:9000/auth/status
+#   Registered clients:    GET  http://localhost:9000/auth/clients
+#   Health check:          GET  http://localhost:9000/actuator/health
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # PostgreSQL 16 — OAuth2 data store
+  #
+  # Spring Authorization Server uses three tables in this database:
+  #   oauth2_registered_client      — registered OAuth2 clients
+  #   oauth2_authorization          — issued tokens and authorization codes
+  #   oauth2_authorization_consent  — user consent records
+  #
+  # These tables are created automatically on auth-server startup via
+  # src/main/resources/schema.sql (spring.sql.init.mode=always).
+  #
+  # Using postgres:16-alpine keeps the image small (~80 MB).
+  # The named volume "postgres_data" ensures data persists across restarts.
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: oauth2-postgres
+    environment:
+      # POSTGRES_DB: the database name to create on first startup.
+      POSTGRES_DB: authserver
+      # POSTGRES_USER / POSTGRES_PASSWORD: credentials for the database.
+      # These match the values in application.yml (overridden below via env vars).
+      POSTGRES_USER: authuser
+      POSTGRES_PASSWORD: authpass
+    ports:
+      # Expose PostgreSQL on host port 5432 for direct inspection with psql:
+      #   psql -h localhost -p 5432 -U authuser -d authserver
+      - "5432:5432"
+    volumes:
+      # Named volume for data persistence across container restarts.
+      # Without this, all OAuth2 client registrations would be lost on restart.
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready checks whether PostgreSQL is accepting connections.
+      # -U specifies the user to connect as (must match POSTGRES_USER).
+      test: ["CMD-SHELL", "pg_isready -U authuser -d authserver"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  # --------------------------------------------------------------------------
+  # OAuth2 Authorization Server (Spring Boot)
+  #
+  # Built from the multi-stage Dockerfile in this project root.
+  # Starts after PostgreSQL is healthy (depends_on with service_healthy condition).
+  #
+  # Environment variable overrides:
+  #   SPRING_DATASOURCE_URL: uses the Docker Compose service name "postgres"
+  #     as the hostname. Inside the Docker network, "postgres" resolves to
+  #     the PostgreSQL container's IP address automatically.
+  #   SPRING_DATASOURCE_USERNAME/PASSWORD: match the PostgreSQL credentials above.
+  #
+  # Port mapping: host 9000 → container 9000
+  # --------------------------------------------------------------------------
+  auth-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oauth2-auth-server
+    ports:
+      # Map host port 9000 to the container's port 9000.
+      # All OAuth2/OIDC traffic goes through this port.
+      - "9000:9000"
+    environment:
+      # Override the DataSource URL to use the Docker Compose service name.
+      # Inside the Docker network, "postgres" resolves to the postgres container.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/authserver
+      SPRING_DATASOURCE_USERNAME: authuser
+      SPRING_DATASOURCE_PASSWORD: authpass
+      # JVM options: increase heap for a production-like deployment.
+      # -Xms: initial heap size, -Xmx: maximum heap size.
+      JAVA_OPTS: "-Xms256m -Xmx512m"
+    depends_on:
+      # Wait for PostgreSQL to be healthy before starting the auth server.
+      # Without this, the auth server might try to connect before PostgreSQL
+      # is ready to accept connections, causing startup failures.
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Check the Actuator health endpoint to determine if the server is ready.
+      # wget is available in the eclipse-temurin JRE Alpine image.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+# ----------------------------------------------------------------------------
+# Named volumes
+#
+# Volumes defined here are managed by Docker Compose. They persist data
+# across container restarts and can be inspected with: docker volume ls
+# ----------------------------------------------------------------------------
+volumes:
+  # Stores PostgreSQL data files. Remove with: docker compose down -v
+  postgres_data:

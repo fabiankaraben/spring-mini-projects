@@ -1,0 +1,120 @@
+# =============================================================================
+# OAuth2 Authorization Server — main application configuration
+#
+# This file configures:
+#   1. Server port (9000 — separate from the typical 8080 to avoid conflicts
+#      when running alongside a resource server on the same machine)
+#   2. Spring Data Source (PostgreSQL)
+#   3. JPA / Hibernate settings
+#   4. SQL schema initialization (Spring Authorization Server tables)
+#   5. Spring Security (user for the authorization_code flow demo)
+#   6. Actuator endpoints
+#   7. Logging
+# =============================================================================
+
+server:
+  # The authorization server runs on port 9000.
+  # This is a convention to distinguish it from resource servers (8080, 8081, etc.).
+  port: 9000
+
+spring:
+
+  # ---------------------------------------------------------------------------
+  # DataSource — PostgreSQL
+  #
+  # Connection details default to localhost for local development.
+  # When running via Docker Compose, these are overridden by environment
+  # variables (SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, etc.).
+  # ---------------------------------------------------------------------------
+  datasource:
+    url: jdbc:postgresql://localhost:5432/authserver
+    username: authuser
+    password: authpass
+    driver-class-name: org.postgresql.Driver
+    # HikariCP connection pool settings.
+    # HikariCP is Spring Boot's default connection pool — it is fast and simple.
+    hikari:
+      # Maximum number of connections in the pool.
+      # For an auth server, 10 connections is sufficient under moderate load.
+      maximum-pool-size: 10
+      # Minimum idle connections kept open for quick request serving.
+      minimum-idle: 2
+      # Maximum time (ms) a request waits for a connection before throwing an exception.
+      connection-timeout: 30000
+
+  # ---------------------------------------------------------------------------
+  # JPA / Hibernate
+  # ---------------------------------------------------------------------------
+  jpa:
+    # Do not auto-create schema via Hibernate DDL.
+    # Schema is managed by spring.sql.init (SQL scripts) below.
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        # Use PostgreSQL dialect for correct SQL generation.
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        # Formats SQL output in logs — useful for debugging.
+        format_sql: true
+    # Log the SQL statements executed by Hibernate (set to false in production).
+    show-sql: false
+
+  # ---------------------------------------------------------------------------
+  # SQL initialization
+  #
+  # Spring Boot automatically executes schema.sql on startup when mode=always.
+  # The Spring Authorization Server provides the required table definitions at:
+  #   org/springframework/security/oauth2/server/authorization/oauth2-authorization-schema.sql
+  #   org/springframework/security/oauth2/server/authorization/oauth2-registered-client-schema.sql
+  #   org/springframework/security/oauth2/server/authorization/oauth2-authorization-consent-schema.sql
+  #
+  # We copy these into our own schema.sql and set init mode to always so they
+  # are created on first run. The IF NOT EXISTS clauses prevent errors on restarts.
+  # ---------------------------------------------------------------------------
+  sql:
+    init:
+      mode: always
+      # schema.sql is located at src/main/resources/schema.sql
+      schema-locations: classpath:schema.sql
+
+  # ---------------------------------------------------------------------------
+  # Spring Security — in-memory user for the authorization_code flow demo
+  #
+  # This defines a demo user that can log in via the form at /login to
+  # authorize an authorization_code grant request. In production you would
+  # use a proper UserDetailsService backed by a user database.
+  # ---------------------------------------------------------------------------
+  security:
+    user:
+      name: user
+      password: password
+      # OIDC requires at least one scope/role to be present for the user.
+      roles:
+        - USER
+
+# -----------------------------------------------------------------------------
+# Spring Boot Actuator
+#
+# Exposes health and info endpoints for monitoring.
+# The health endpoint is used by Docker Compose healthcheck.
+# -----------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+logging:
+  level:
+    # Spring Authorization Server internal classes — set to DEBUG to see
+    # detailed token issuance and validation logs during development.
+    org.springframework.security.oauth2.server.authorization: INFO
+    # Spring Security filter chain — DEBUG shows every security decision.
+    org.springframework.security: INFO
+    com.example.authserver: DEBUG

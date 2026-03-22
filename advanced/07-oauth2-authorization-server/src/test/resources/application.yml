@@ -1,0 +1,65 @@
+# =============================================================================
+# Test application configuration for the OAuth2 Authorization Server.
+#
+# This file overrides the main application.yml during tests. Key changes:
+#   - DataSource: no URL set here; Testcontainers provides it via
+#     @DynamicPropertySource in integration tests.
+#   - JPA: validate (not none) so Hibernate checks the schema on startup.
+#   - SQL init: disabled here; the PostgreSQL Testcontainer comes with a clean
+#     database and schema.sql is applied via spring.sql.init properties set
+#     dynamically in the integration test.
+#   - Logging: more verbose to aid test debugging.
+# =============================================================================
+
+server:
+  port: 0  # Random port — each test gets its own port to avoid conflicts
+
+spring:
+
+  # ---------------------------------------------------------------------------
+  # JPA settings for tests
+  # ---------------------------------------------------------------------------
+  jpa:
+    hibernate:
+      # "create-drop" creates the schema at test startup and drops it at the end.
+      # This is useful for tests that don't use Testcontainers and rely on
+      # schema.sql (e.g., future unit tests with H2).
+      # For Testcontainers integration tests, the schema is created via schema.sql.
+      ddl-auto: none
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: false
+
+  # ---------------------------------------------------------------------------
+  # SQL initialization — enabled always so schema.sql runs in integration tests
+  # ---------------------------------------------------------------------------
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+  # Spring Security — same demo user as main config
+  security:
+    user:
+      name: user
+      password: password
+      roles:
+        - USER
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# More verbose logging during tests for easier debugging
+logging:
+  level:
+    org.springframework.security.oauth2.server.authorization: DEBUG
+    com.example.authserver: DEBUG
+    org.testcontainers: INFO
