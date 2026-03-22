@@ -1,0 +1,27 @@
+# ============================================================================
+# application-test.yml — Test profile configuration
+# ============================================================================
+# Activated via @ActiveProfiles("test") on integration test classes.
+# Overrides production settings to use Testcontainers-provided PostgreSQL.
+# The actual JDBC URL is set dynamically by the Testcontainers @DynamicPropertySource.
+# ============================================================================
+
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: create  # Drop and recreate schema on every context startup (clean event store)
+    show-sql: false
+
+axon:
+  axonserver:
+    enabled: false
+  serializer:
+    general: jackson
+    events: jackson
+    messages: jackson
+
+logging:
+  level:
+    com.example.cqrs: DEBUG
+    org.axonframework: WARN
+    org.hibernate.SQL: WARN

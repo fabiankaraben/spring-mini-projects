@@ -1,0 +1,89 @@
+# ============================================================================
+# application.yml — CQRS with Axon Framework
+# ============================================================================
+# This file configures the Spring Boot application for local development and
+# for when it runs inside Docker Compose (environment variables override values).
+# ============================================================================
+
+spring:
+  application:
+    name: cqrs-with-axon
+
+  # --------------------------------------------------------------------------
+  # DataSource — PostgreSQL connection.
+  # In Docker Compose the SPRING_DATASOURCE_* environment variables override
+  # these defaults so the app connects to the 'axon-db' container.
+  # --------------------------------------------------------------------------
+  datasource:
+    url: jdbc:postgresql://localhost:5432/axondb
+    username: axon
+    password: axon
+    driver-class-name: org.postgresql.Driver
+
+  # --------------------------------------------------------------------------
+  # JPA / Hibernate configuration.
+  # --------------------------------------------------------------------------
+  jpa:
+    hibernate:
+      # 'update' auto-creates/updates tables on startup.
+      # Axon's JPA entities (domain_event_entry, snapshot_event_entry, etc.)
+      # and our OrderSummary entity will be created automatically.
+      # For production, use Flyway or Liquibase instead.
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+# --------------------------------------------------------------------------
+# Axon Framework configuration.
+# --------------------------------------------------------------------------
+axon:
+  # Disable Axon Server auto-configuration — we use the embedded JPA event store.
+  # Without this, the auto-configuration would try to connect to localhost:8124.
+  axonserver:
+    enabled: false
+
+  # Serializer: use Jackson (JSON) for events and commands.
+  # This makes the event store human-readable in the database and enables
+  # future schema evolution with Jackson's polymorphism features.
+  serializer:
+    general: jackson
+    events: jackson
+    messages: jackson
+
+  # Use SUBSCRIBING event processor so projections run synchronously on the
+  # same thread as the command handler. This ensures the read model is updated
+  # before commandGateway.sendAndWait() returns (no eventual-consistency gap).
+  eventhandling:
+    processors:
+      default:
+        mode: subscribing
+
+# --------------------------------------------------------------------------
+# Server configuration
+# --------------------------------------------------------------------------
+server:
+  port: 8080
+
+# --------------------------------------------------------------------------
+# Actuator — expose the health endpoint used by Docker health checks
+# --------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# --------------------------------------------------------------------------
+# Logging
+# --------------------------------------------------------------------------
+logging:
+  level:
+    com.example.cqrs: INFO
+    org.axonframework: WARN
+    org.hibernate.SQL: WARN

@@ -1,0 +1,78 @@
+# ============================================================================
+# docker-compose.yml — CQRS with Axon Framework
+# ============================================================================
+# Starts the complete system: PostgreSQL (event store + read model) and the
+# Spring Boot application.
+#
+# Usage:
+#   docker compose up --build        # build the app image and start everything
+#   docker compose up --build -d     # same but detached (background)
+#   docker compose down -v           # stop and remove containers and volumes
+#   docker compose logs -f app       # tail app logs
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # PostgreSQL — stores both the Axon event store tables and the read model.
+  #
+  # Axon tables (auto-created by Hibernate DDL on first start):
+  #   domain_event_entry    — persists all domain events (the write-side truth)
+  #   snapshot_event_entry  — aggregate state snapshots (speeds up replay)
+  #   saga_entry            — saga state (not used in this project)
+  #   association_value_entry — saga association values (not used here)
+  #
+  # Read-model table (also auto-created):
+  #   order_summaries       — the denormalised query projection
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: axon-postgres
+    environment:
+      POSTGRES_DB: axondb
+      POSTGRES_USER: axon
+      POSTGRES_PASSWORD: axon
+    ports:
+      # Expose port 5432 on the host so you can connect with psql or a GUI
+      - "5432:5432"
+    volumes:
+      # Named volume for data persistence across restarts
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U axon -d axondb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # Spring Boot application — the CQRS service (port 8080)
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: axon-app
+    ports:
+      - "8080:8080"
+    environment:
+      # Override datasource to point at the 'postgres' service above
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/axondb
+      SPRING_DATASOURCE_USERNAME: axon
+      SPRING_DATASOURCE_PASSWORD: axon
+      # Disable Axon Server (we use the embedded JPA event store)
+      AXON_AXONSERVER_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+
+# ------------------------------------------------------------------------------
+# Named volumes — data persists across 'docker compose down' (without -v flag)
+# ------------------------------------------------------------------------------
+volumes:
+  postgres-data:
