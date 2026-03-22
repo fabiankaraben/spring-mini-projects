@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!--
+		Order Service — the saga initiator.
+
+		Responsibilities:
+		  1. Expose a REST API to create orders (POST /api/orders).
+		  2. Persist orders locally in PostgreSQL with status PENDING.
+		  3. Publish an OrderCreatedEvent to Kafka so other services react.
+		  4. Listen for PaymentProcessedEvent / PaymentFailedEvent and
+		     InventoryReservedEvent / InventoryFailedEvent to update order status.
+		  5. Expose GET /api/orders/{id} for status polling.
+
+		Saga flow:
+		  Client → POST /api/orders
+		    → Order saved (PENDING)
+		    → OrderCreatedEvent published
+		    → Payment Service picks it up → processes → PaymentProcessedEvent
+		    → Inventory Service picks PaymentProcessedEvent → reserves → InventoryReservedEvent
+		    → Order Service picks InventoryReservedEvent → marks COMPLETED
+		  On any failure:
+		    → PaymentFailedEvent or InventoryFailedEvent
+		    → Compensation: order marked CANCELLED (+ upstream compensations published)
+	-->
+
+	<parent>
+		<groupId>com.example.saga</groupId>
+		<artifactId>saga-pattern-choreography</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+	</parent>
+
+	<artifactId>order-service</artifactId>
+	<name>order-service</name>
+	<description>Order Service — saga initiator microservice</description>
+
+	<dependencies>
+		<!--
+			Spring Web: provides the embedded Tomcat server and the Spring MVC
+			framework used to expose the REST API (OrderController).
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!--
+			Spring Data JPA: provides JPA-based repositories backed by Hibernate.
+			Used to persist Order entities to PostgreSQL.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+
+		<!--
+			Spring Kafka: provides KafkaTemplate for publishing events and
+			@KafkaListener for consuming events from Kafka topics.
+		-->
+		<dependency>
+			<groupId>org.springframework.kafka</groupId>
+			<artifactId>spring-kafka</artifactId>
+		</dependency>
+
+		<!--
+			PostgreSQL JDBC driver: required at runtime for Hibernate/JPA to
+			communicate with the PostgreSQL database.
+		-->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
+		<!--
+			Spring Boot Actuator: exposes /actuator/health and /actuator/info
+			endpoints used by Docker health checks and monitoring tools.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Validation: provides Bean Validation (JSR-380) support
+			via Hibernate Validator. Used to validate incoming REST request bodies
+			(e.g., @NotNull, @Positive on order fields).
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!--
+			Spring Boot Test: pulls in JUnit 5, AssertJ, Mockito and all the
+			Spring test infrastructure for unit and integration tests.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Spring Kafka Test: provides EmbeddedKafkaBroker and
+			@EmbeddedKafka for fast in-process Kafka tests, plus
+			KafkaTestUtils for consumer utilities.
+			Used by unit tests that do NOT require Docker.
+		-->
+		<dependency>
+			<groupId>org.springframework.kafka</groupId>
+			<artifactId>spring-kafka-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers JUnit 5 integration: provides the @Testcontainers
+			class-level annotation and the @Container field annotation that
+			manage Docker container lifecycle alongside the JUnit 5 test lifecycle.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers PostgreSQL module: starts a real PostgreSQL container
+			for integration tests, ensuring the JPA layer is tested against a
+			real database rather than an in-memory H2 substitute.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers Kafka module: starts a real Kafka (Confluent) container
+			for integration tests, so we can verify end-to-end event publishing
+			and consuming without mocking the broker.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>kafka</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin: packages the application as an executable fat-jar -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

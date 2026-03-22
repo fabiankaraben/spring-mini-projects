@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!--
+		Parent POM for the Saga Pattern Choreography mini-project.
+
+		This is a Maven multi-module project containing three independent
+		Spring Boot microservices that communicate via Kafka events to
+		implement the Saga choreography pattern for distributed transactions:
+
+		  1. order-service    — accepts order requests, drives the saga
+		  2. payment-service  — processes payments, reacts to order events
+		  3. inventory-service — reserves stock, reacts to payment events
+
+		Why multi-module?
+		  Each service is a separate Spring Boot application with its own
+		  database, Kafka consumers/producers, and REST API. Multi-module
+		  Maven lets us build, test and run all three from a single root
+		  without duplicating Spring Boot parent version declarations.
+	-->
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/>
+	</parent>
+
+	<groupId>com.example.saga</groupId>
+	<artifactId>saga-pattern-choreography</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>pom</packaging>
+	<name>saga-pattern-choreography</name>
+	<description>
+		Spring Boot mini-project demonstrating the Saga choreography pattern for
+		distributed transactions across microservices. Three services (Order,
+		Payment, Inventory) communicate exclusively via Kafka domain events —
+		no central orchestrator, no distributed locks, no two-phase commit.
+	</description>
+
+	<!-- Declare the three microservice sub-modules -->
+	<modules>
+		<module>order-service</module>
+		<module>payment-service</module>
+		<module>inventory-service</module>
+	</modules>
+
+	<properties>
+		<java.version>21</java.version>
+		<!-- Testcontainers BOM version — pins all Testcontainers module versions in sync -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+
+	<!--
+		Dependency Management section:
+		  Versions declared here are inherited by all child modules without
+		  needing to repeat the version in each child pom.xml.
+	-->
+	<dependencyManagement>
+		<dependencies>
+			<!-- Manage all Testcontainers module versions via the BOM so they stay in sync -->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<!--
+		Plugin Management:
+		  The Surefire configuration is shared by all child modules so we only
+		  declare it once here.
+	-->
+	<build>
+		<pluginManagement>
+			<plugins>
+				<!--
+					Maven Surefire Plugin: configures test execution for Java 21+.
+
+					argLine breakdown:
+					  -XX:+EnableDynamicAgentLoading  - silences Mockito/ByteBuddy agent warnings
+					  -Xshare:off                     - disables class-data sharing (avoids conflicts)
+					  -Dnet.bytebuddy.experimental    - required on Java 25+; harmless on Java 21-24
+					  add-opens                       - grants ByteBuddy/Mockito deep reflection access
+
+					DOCKER_API_VERSION=1.44:
+					  Docker Desktop 29+ rejects the legacy v1.24 API path that docker-java uses by
+					  default. Setting 1.44 here (and in docker-java.properties on the test classpath)
+					  ensures Testcontainers works correctly on Docker Desktop 29+.
+				-->
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-surefire-plugin</artifactId>
+					<configuration>
+						<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off -Dnet.bytebuddy.experimental=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+						<environmentVariables>
+							<!-- Ensures docker-java uses API v1.44 (Docker Desktop 29+ requires this) -->
+							<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+						</environmentVariables>
+					</configuration>
+				</plugin>
+			</plugins>
+		</pluginManagement>
+	</build>
+
+</project>

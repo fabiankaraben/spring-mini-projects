@@ -1,0 +1,74 @@
+# ============================================================================
+# Order Service — application configuration
+#
+# This file configures the Spring Boot application for local development.
+# When running via Docker Compose, environment variables override these values
+# (e.g., SPRING_DATASOURCE_URL overrides spring.datasource.url).
+# ============================================================================
+
+spring:
+  application:
+    name: order-service
+
+  # --------------------------------------------------------------------------
+  # DataSource — PostgreSQL connection settings
+  #
+  # The JDBC URL, username and password are overridden by environment variables
+  # when the service runs in Docker Compose.
+  # --------------------------------------------------------------------------
+  datasource:
+    url: jdbc:postgresql://localhost:5432/orderdb
+    username: saga
+    password: saga
+    driver-class-name: org.postgresql.Driver
+
+  # --------------------------------------------------------------------------
+  # JPA / Hibernate
+  #
+  # ddl-auto: update — Hibernate automatically creates or alters tables on
+  # startup to match the entity definitions. Use 'validate' in production.
+  # show-sql: true  — logs all SQL statements (helpful for learning/debugging).
+  # --------------------------------------------------------------------------
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # --------------------------------------------------------------------------
+  # Kafka
+  #
+  # bootstrap-servers is overridden to kafka:9092 when running in Docker Compose.
+  # --------------------------------------------------------------------------
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      # Require acknowledgment from all replicas before considering a send
+      # successful — safer but slightly slower than acks=1.
+      acks: all
+      retries: 3
+    consumer:
+      # Start reading from the earliest available offset if no committed offset
+      # exists for this consumer group. Ensures no events are missed on first start.
+      auto-offset-reset: earliest
+      # Manually commit offsets after processing to avoid marking a message as
+      # consumed before the business logic completes.
+      enable-auto-commit: false
+
+# --------------------------------------------------------------------------
+# Server port
+# --------------------------------------------------------------------------
+server:
+  port: 8081
+
+# --------------------------------------------------------------------------
+# Actuator endpoints
+# --------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
