@@ -1,0 +1,43 @@
+# =============================================================================
+# Test application configuration for the OAuth2 Resource Server.
+#
+# This file overrides the main application.yml during tests. Key changes:
+#   - Server port: 0 (random port to avoid conflicts between test runs)
+#   - JWT JWK Set URI: overridden dynamically by @DynamicPropertySource in
+#     integration tests pointing to the WireMock container's /oauth2/jwks stub.
+#   - Issuer URI: overridden dynamically in integration tests.
+#   - Logging: more verbose to aid test debugging.
+# =============================================================================
+
+server:
+  # Random port: each test gets its own port, avoiding port conflicts.
+  port: 0
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # These values are overridden at test runtime by @DynamicPropertySource
+          # in ResourceServerIntegrationTest, pointing to the WireMock container.
+          # The placeholder values here prevent Spring from rejecting missing config.
+          jwk-set-uri: http://localhost:9000/oauth2/jwks
+          issuer-uri: http://localhost:9000
+
+# Actuator — same as main config
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# More verbose logging during tests for easier debugging
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.security.oauth2.server.resource: DEBUG
+    com.example.resourceserver: DEBUG
+    org.testcontainers: INFO

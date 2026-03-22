@@ -1,0 +1,154 @@
+# ============================================================================
+# Docker Compose file for the OAuth2 Resource Server mini-project
+#
+# This file defines a two-service stack:
+#   1. auth-server      — The OAuth2 Authorization Server (project 07), built
+#                         from its own Dockerfile. Issues JWT access tokens.
+#   2. resource-server  — The OAuth2 Resource Server (this project), built from
+#                         the local Dockerfile. Validates JWT tokens issued by
+#                         the auth-server and protects the Products API.
+#
+# How the services interact:
+#   - The resource-server connects to auth-server's JWK Set endpoint
+#     (http://auth-server:9000/oauth2/jwks) to fetch the RSA public key used
+#     for JWT signature verification. "auth-server" resolves automatically via
+#     Docker Compose's built-in DNS.
+#   - Clients obtain a JWT from the auth-server (POST :9000/oauth2/token) and
+#     then use it as a Bearer token when calling the resource-server (:8081/api/).
+#
+# Port mapping:
+#   - Authorization Server: host 9000 → container 9000
+#   - Resource Server:      host 8081 → container 8081
+#
+# Note: The auth-server service is defined here for convenience as a standalone
+# demo. In a real microservices deployment, the auth-server would run in its own
+# Compose stack or Kubernetes namespace, and the resource-server would only need
+# its JWK Set URI.
+#
+# Usage:
+#   docker compose up --build          # Build both images and start the stack
+#   docker compose up --build -d       # Same, in detached (background) mode
+#   docker compose down                # Stop and remove containers
+#   docker compose logs -f             # Follow logs from all services
+#   docker compose logs -f resource-server  # Follow resource-server logs only
+#
+# Workflow to test the full flow:
+#   1. docker compose up --build -d
+#   2. Obtain a token from the auth-server:
+#        curl -s -X POST http://localhost:9000/oauth2/token \
+#          -H "Authorization: Basic $(echo -n 'service-account-client:service-secret' | base64)" \
+#          -d "grant_type=client_credentials&scope=products.read"
+#   3. Copy the access_token value and call the resource-server:
+#        curl -H "Authorization: Bearer <access_token>" http://localhost:8081/api/products
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # OAuth2 Authorization Server
+  #
+  # Runs the Spring Authorization Server from project 07. It is included here
+  # so this project is fully self-contained for demonstration purposes.
+  #
+  # The authorization server needs a PostgreSQL database to persist registered
+  # clients and issued tokens. We spin up a minimal postgres container here.
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: oauth2-rs-postgres
+    environment:
+      POSTGRES_DB: authserver
+      POSTGRES_USER: authuser
+      POSTGRES_PASSWORD: authpass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authuser -d authserver"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  auth-server:
+    # Build from the sibling project's Dockerfile.
+    # Adjust the context path if your directory structure differs.
+    build:
+      context: ../07-oauth2-authorization-server
+      dockerfile: Dockerfile
+    container_name: oauth2-rs-auth-server
+    ports:
+      # Authorization Server is accessible on host port 9000.
+      # Clients call POST http://localhost:9000/oauth2/token to get a JWT.
+      - "9000:9000"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/authserver
+      SPRING_DATASOURCE_USERNAME: authuser
+      SPRING_DATASOURCE_PASSWORD: authpass
+      # The issuer URI embedded in every JWT. Must match the value configured
+      # in the resource-server's application.yml (OAUTH2_ISSUER_URI below).
+      # When running in Docker, "auth-server" is the container hostname —
+      # but the JWT "iss" claim must match the externally visible URL (localhost:9000)
+      # because clients (and the resource-server doing issuer validation) see localhost.
+      JAVA_OPTS: "-Xms256m -Xmx512m"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # --------------------------------------------------------------------------
+  # OAuth2 Resource Server (this project)
+  #
+  # Built from the Dockerfile in this project root.
+  # Starts after auth-server is healthy to ensure the JWK Set is available.
+  #
+  # Key environment variables:
+  #   SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+  #     Points at the auth-server's JWK Set endpoint. Inside the Docker network
+  #     the auth-server is reachable by its service name "auth-server".
+  #
+  #   SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+  #     Must match the "iss" claim in every JWT. The auth-server embeds
+  #     "http://localhost:9000" as the issuer (its externally visible URL).
+  #     The resource-server validates this claim on every request.
+  # --------------------------------------------------------------------------
+  resource-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oauth2-resource-server
+    ports:
+      # Resource Server is accessible on host port 8081.
+      # Clients call its protected API: GET http://localhost:8081/api/products
+      - "8081:8081"
+    environment:
+      # JWK Set URI: inside the Docker network, "auth-server" resolves to the
+      # auth-server container. The resource-server fetches the public key here
+      # on startup and caches it for JWT signature verification.
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://auth-server:9000/oauth2/jwks
+      # Issuer URI: must match the "iss" claim in JWTs issued by the auth-server.
+      # The auth-server is configured with issuer "http://localhost:9000" (its external URL).
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://localhost:9000
+      JAVA_OPTS: "-Xms128m -Xmx256m"
+    depends_on:
+      auth-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+# ----------------------------------------------------------------------------
+# Named volumes
+# ----------------------------------------------------------------------------
+volumes:
+  postgres_data:

@@ -1,0 +1,71 @@
+# =============================================================================
+# OAuth2 Resource Server — main application configuration
+#
+# This file configures:
+#   1. Server port (8081 — distinct from 8080 and auth server port 9000)
+#   2. Spring OAuth2 Resource Server JWT settings (JWK Set URI)
+#   3. Spring Boot Actuator endpoints
+#   4. Logging
+# =============================================================================
+
+server:
+  # Port 8081 is the convention for a resource server when running alongside
+  # an authorization server (port 9000) and a client app (port 8080).
+  port: 8081
+
+spring:
+
+  # ---------------------------------------------------------------------------
+  # Spring Security — OAuth2 Resource Server configuration
+  #
+  # The resource server validates incoming JWT Bearer tokens by fetching the
+  # Authorization Server's public key from the JWK Set URI.
+  #
+  # jwk-set-uri: The URL where the authorization server exposes its RSA public
+  # keys in JWK (JSON Web Key) Set format. Spring Security caches the key set
+  # after the first request and refreshes it automatically on key rotation.
+  #
+  # When running via Docker Compose, the auth-server service is reachable by its
+  # service name "auth-server" on port 9000 within the Docker network.
+  # For local development (outside Docker), use http://localhost:9000/oauth2/jwks.
+  # ---------------------------------------------------------------------------
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # JWK Set URI — must point to the Authorization Server's public key endpoint.
+          # This value is overridden by the SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+          # environment variable when running in Docker Compose.
+          jwk-set-uri: http://localhost:9000/oauth2/jwks
+
+          # Issuer URI — the resource server validates that the "iss" claim in every
+          # incoming JWT matches this value. It must exactly match the issuer configured
+          # on the Authorization Server (AuthorizationServerSettings.issuer).
+          # This prevents tokens from other authorization servers from being accepted.
+          issuer-uri: http://localhost:9000
+
+# -----------------------------------------------------------------------------
+# Spring Boot Actuator
+#
+# Exposes health and info endpoints. The health endpoint is used by Docker
+# Compose healthcheck and Kubernetes liveness/readiness probes.
+# -----------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+logging:
+  level:
+    # Spring Security filter chain — set to DEBUG to see every security decision
+    org.springframework.security: INFO
+    # Resource server JWT validation — DEBUG shows token decoding details
+    org.springframework.security.oauth2.server.resource: INFO
+    com.example.resourceserver: DEBUG
