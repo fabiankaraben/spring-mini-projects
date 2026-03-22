@@ -1,0 +1,82 @@
+# ============================================================================
+# application.yml — Event Sourcing with Axon Framework
+# ============================================================================
+# This file configures the Spring Boot application for local/Docker deployment.
+# For tests, application-test.yml overrides the datasource with Testcontainers values.
+# ============================================================================
+
+spring:
+
+  application:
+    name: event-sourcing
+
+  # --------------------------------------------------------------------------
+  # DataSource — PostgreSQL (overridden in Docker via environment variables)
+  # --------------------------------------------------------------------------
+  datasource:
+    url: jdbc:postgresql://localhost:5432/axondb
+    username: axon
+    password: axon
+    driver-class-name: org.postgresql.Driver
+
+  # --------------------------------------------------------------------------
+  # JPA / Hibernate
+  # --------------------------------------------------------------------------
+  jpa:
+    hibernate:
+      # 'update' creates or alters tables on startup without dropping data.
+      # Axon's JPA entity classes (domain_event_entry, snapshot_event_entry, etc.)
+      # and our AccountSummary read model table are both created this way.
+      # In production, prefer Flyway or Liquibase for controlled migrations.
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        # Show SQL in logs for educational / debugging purposes
+        show_sql: false
+        format_sql: true
+    # Defer datasource initialization so Hibernate DDL runs before data.sql (if any)
+    defer-datasource-initialization: true
+
+  # --------------------------------------------------------------------------
+  # Jackson — JSON serialization settings
+  # --------------------------------------------------------------------------
+  jackson:
+    serialization:
+      # Serialize java.time.Instant as ISO-8601 string instead of epoch array
+      write-dates-as-timestamps: false
+
+# --------------------------------------------------------------------------
+# Axon Framework
+# --------------------------------------------------------------------------
+axon:
+  # Disable Axon Server connector — we use the embedded JPA event store
+  axonserver:
+    enabled: false
+
+# --------------------------------------------------------------------------
+# Spring Boot Actuator
+# --------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# --------------------------------------------------------------------------
+# Server
+# --------------------------------------------------------------------------
+server:
+  port: 8080
+
+# --------------------------------------------------------------------------
+# Logging
+# --------------------------------------------------------------------------
+logging:
+  level:
+    # Show Axon Framework internals at INFO level (set to DEBUG for more detail)
+    org.axonframework: INFO
+    com.example.eventsourcing: DEBUG
