@@ -1,0 +1,167 @@
+# ============================================================================
+# Docker Compose file for the Spring Cloud Stream mini-project
+#
+# This file defines a three-service stack:
+#   1. zookeeper  — ZooKeeper coordination service (required by Kafka)
+#   2. kafka      — Apache Kafka message broker
+#   3. app        — The Spring Cloud Stream application (built from Dockerfile)
+#
+# Pipeline (all running inside Docker):
+#   REST Client → app (port 8080)
+#                  │
+#                  ├─► Kafka topic: orders
+#                  │         │
+#                  │         ▼ orderProcessor (Function)
+#                  │    Kafka topic: orders-processed  OR  orders-rejected
+#                  │         │
+#                  │         ▼ notificationConsumer / rejectionLogger (Consumer)
+#                  │    logs notification / rejection
+#                  │
+#                  └─► GET /api/orders/{id}  ← poll order status
+#
+# Usage:
+#   docker compose up --build       # Build app image and start all services
+#   docker compose up --build -d    # Same, but in detached (background) mode
+#   docker compose down             # Stop and remove containers
+#   docker compose logs -f          # Follow logs from all services
+#   docker compose logs -f app      # Follow logs only from the app
+#
+# Accessing the application after startup:
+#   REST API:         http://localhost:8080/api/orders
+#   Actuator health:  http://localhost:8080/actuator/health
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # ZooKeeper — Kafka coordination service
+  #
+  # Kafka uses ZooKeeper for:
+  #   - Leader election for broker and partition leaders.
+  #   - Storing metadata (topics, partition assignments, consumer offsets).
+  #   - Broker registration and discovery.
+  #
+  # Note: Kafka 3.x+ supports KRaft mode (ZooKeeper-free), but using ZooKeeper
+  # here for simplicity and broad compatibility with Confluent images.
+  # --------------------------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: zookeeper
+    environment:
+      # The port ZooKeeper listens on for client connections from Kafka.
+      ZOOKEEPER_CLIENT_PORT: 2181
+      # Heartbeat interval in milliseconds. Controls how quickly ZooKeeper
+      # detects broker failures. 2000ms is the standard default.
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      # Verify ZooKeeper is responding on its client port before Kafka starts.
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep -q imok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  # --------------------------------------------------------------------------
+  # Kafka — Apache Kafka message broker
+  #
+  # This is the central message bus. Spring Cloud Stream connects to it and
+  # automatically creates topics (orders, orders-processed, orders-rejected).
+  #
+  # Listener configuration:
+  #   KAFKA_LISTENERS defines the interfaces Kafka binds on:
+  #     - INTERNAL://kafka:29092  — used for container-to-container communication
+  #     - EXTERNAL://0.0.0.0:9092 — used for host-to-container communication
+  #
+  #   KAFKA_ADVERTISED_LISTENERS is what Kafka advertises to clients:
+  #     - INTERNAL://kafka:29092  — app container uses "kafka:29092" (Docker DNS)
+  #     - EXTERNAL://localhost:9092 — host tools use "localhost:9092"
+  #
+  # Why two listener configs?
+  #   Docker containers reference each other by service name ("kafka"), but
+  #   tools running on your host machine use "localhost". The two-listener setup
+  #   handles both cases without requiring network workarounds.
+  # --------------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      # Expose Kafka on the standard port 9092 for host-side tools.
+      # E.g.: kafka-console-consumer --bootstrap-server localhost:9092 ...
+      - "9092:9092"
+    environment:
+      # Unique broker ID within the Kafka cluster (only one broker here).
+      KAFKA_BROKER_ID: 1
+
+      # ZooKeeper connection string (service name + port)
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+
+      # Bind on both internal (container) and external (host) interfaces
+      KAFKA_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://0.0.0.0:9092
+
+      # Advertise different addresses for container vs host clients
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+
+      # Map the listener names to the PLAINTEXT security protocol
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+
+      # Use the INTERNAL listener for broker-to-broker communication
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+
+      # Replication factor for internal Confluent Platform topics.
+      # Set to 1 because we only have a single broker.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+      # Reduce the number of partitions for auto-created topics in this demo.
+      KAFKA_NUM_PARTITIONS: 3
+
+      # Auto-create topics on first use (Spring Cloud Stream relies on this
+      # when spring.cloud.stream.kafka.binder.auto-create-topics=true).
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      # Verify the broker is ready by checking the metadata for the broker itself.
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # App — Spring Cloud Stream application
+  #
+  # Built from the multi-stage Dockerfile in this project root.
+  # Connects to Kafka using the INTERNAL listener address "kafka:29092"
+  # (Docker Compose DNS resolves "kafka" to the Kafka container's IP).
+  #
+  # Environment variables override the default application.yml values:
+  #   SPRING_CLOUD_STREAM_KAFKA_BINDER_BROKERS — points to the Kafka container
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spring-cloud-stream-app
+    ports:
+      # Expose port 8080 for REST API access from the host machine.
+      - "8080:8080"
+    environment:
+      # Override the Kafka broker address to use the Docker Compose service name.
+      # Docker Compose creates a bridge network where "kafka" resolves to the
+      # Kafka container. Port 29092 is the INTERNAL listener.
+      SPRING_CLOUD_STREAM_KAFKA_BINDER_BROKERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s

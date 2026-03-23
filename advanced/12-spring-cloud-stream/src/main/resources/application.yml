@@ -1,0 +1,169 @@
+# =============================================================================
+# Spring Cloud Stream — Order Notification Pipeline
+#
+# This file configures:
+#   1. The Spring Boot application (server port, actuator)
+#   2. The Spring Cloud Stream bindings (functional bean → Kafka topic mapping)
+#   3. The Kafka binder settings (broker address, consumer groups, serialization)
+#
+# Spring Cloud Stream functional programming model:
+#   - Each java.util.function.Supplier / Function / Consumer bean is automatically
+#     discovered and linked to Kafka topics via the bindings below.
+#
+# Naming convention for binding names:
+#   <beanName>-out-0  → outbound (producer) binding
+#   <beanName>-in-0   → inbound  (consumer) binding
+# =============================================================================
+
+spring:
+  application:
+    name: spring-cloud-stream
+
+  # ---------------------------------------------------------------------------
+  # Spring Cloud Function — function definition
+  #
+  # This top-level property is read by BeanFactoryAwareFunctionRegistry to
+  # determine which functional beans to activate. Without it, the registry
+  # warns "Multiple functional beans were found" and does not bind any of them.
+  #
+  # spring.cloud.stream.function.definition (below) is the Spring Cloud Stream
+  # binding-level equivalent, but BOTH are needed: the registry reads the
+  # top-level one, and the binder reads the stream-level one.
+  # ---------------------------------------------------------------------------
+  cloud:
+    function:
+      definition: orderSupplier;orderProcessor;notificationConsumer;rejectionLogger
+
+    stream:
+
+      # -----------------------------------------------------------------------
+      # Function definition:
+      # Lists all functional beans that Spring Cloud Stream should activate.
+      # Multiple beans are separated by semicolons.
+      #
+      # Why explicitly list them?
+      # Spring Cloud Stream auto-detects Supplier / Function / Consumer beans,
+      # but explicitly listing them avoids ambiguity when multiple beans of the
+      # same type exist in the application context.
+      # -----------------------------------------------------------------------
+      function:
+        definition: orderSupplier;orderProcessor;notificationConsumer;rejectionLogger
+
+      # -----------------------------------------------------------------------
+      # Bindings:
+      # Maps each functional bean's input/output to a named Kafka topic.
+      #
+      # Convention:
+      #   <beanName>-out-0  → producer (the bean publishes to this topic)
+      #   <beanName>-in-0   → consumer (the bean consumes from this topic)
+      # -----------------------------------------------------------------------
+      bindings:
+
+        # --- orderSupplier ---
+        # Supplier: produces OrderPlacedEvent messages to the "orders" topic.
+        orderSupplier-out-0:
+          destination: orders          # Kafka topic name
+          content-type: application/json
+
+        # --- orderProcessor input ---
+        # Function (inbound): consumes OrderPlacedEvent from the "orders" topic.
+        orderProcessor-in-0:
+          destination: orders          # Same topic as supplier output
+          group: order-processor-group # Consumer group: ensures each message is
+                                        # processed by exactly one instance when
+                                        # multiple replicas run in parallel.
+          content-type: application/json
+
+        # --- orderProcessor output ---
+        # Function (outbound): publishes OrderProcessedEvent to "orders-processed".
+        # Note: OrderRejectedEvent is dynamically routed to "orders-rejected"
+        # via the "spring.cloud.stream.sendto.destination" message header.
+        orderProcessor-out-0:
+          destination: orders-processed
+          content-type: application/json
+
+        # --- notificationConsumer ---
+        # Consumer: consumes OrderProcessedEvent from "orders-processed".
+        notificationConsumer-in-0:
+          destination: orders-processed
+          group: notification-consumer-group
+          content-type: application/json
+
+        # --- rejectionLogger ---
+        # Consumer: consumes OrderRejectedEvent from "orders-rejected".
+        rejectionLogger-in-0:
+          destination: orders-rejected
+          group: rejection-logger-group
+          content-type: application/json
+
+      # -----------------------------------------------------------------------
+      # Kafka binder configuration
+      # -----------------------------------------------------------------------
+      kafka:
+        binder:
+          # Kafka broker address. Overridden in Docker Compose via environment
+          # variable SPRING_CLOUD_STREAM_KAFKA_BINDER_BROKERS.
+          brokers: localhost:9092
+
+          # Auto-create topics on first use.
+          # In production you would pre-create topics with specific partition
+          # counts and replication factors. Here we keep it simple.
+          auto-create-topics: true
+
+          # Default number of partitions for auto-created topics.
+          # Using 3 partitions allows parallel consumption across 3 instances.
+          min-partition-count: 3
+
+        # Bindings-level Kafka settings apply per binding.
+        bindings:
+          orderProcessor-in-0:
+            consumer:
+              # Start from the earliest available offset when a new consumer group
+              # is first registered. Without this, the consumer would miss messages
+              # published before the consumer group was created.
+              start-offset: earliest
+
+          notificationConsumer-in-0:
+            consumer:
+              start-offset: earliest
+
+          rejectionLogger-in-0:
+            consumer:
+              start-offset: earliest
+
+  # ---------------------------------------------------------------------------
+  # Jackson configuration
+  # ---------------------------------------------------------------------------
+  jackson:
+    # Serialize java.time.Instant as ISO-8601 strings (not epoch milliseconds).
+    # This makes the JSON more readable and avoids ambiguity between seconds/millis.
+    serialization:
+      write-dates-as-timestamps: false
+
+# -----------------------------------------------------------------------------
+# Server
+# -----------------------------------------------------------------------------
+server:
+  port: 8080
+
+# -----------------------------------------------------------------------------
+# Actuator
+# -----------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expose health and info endpoints for Docker health checks and monitoring.
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+logging:
+  level:
+    com.example.cloudstream: DEBUG
+    org.springframework.cloud.stream: INFO
+    org.apache.kafka: WARN

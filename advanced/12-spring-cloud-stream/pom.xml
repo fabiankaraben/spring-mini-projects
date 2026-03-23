@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!--
+		Spring Cloud Stream mini-project.
+
+		This project demonstrates how Spring Cloud Stream abstracts the message
+		broker (Kafka) behind a simple functional programming model. Instead of
+		writing KafkaTemplate / @KafkaListener code directly, you define:
+
+		  - Supplier<T>   — a message producer (outbound binding)
+		  - Consumer<T>   — a message consumer (inbound binding)
+		  - Function<T,R> — a message processor (inbound + outbound binding)
+
+		Spring Cloud Stream wires these functions to Kafka topics automatically
+		based on the application.yml binding configuration.
+
+		Domain scenario: an e-commerce order notification pipeline.
+		  1. Client POSTs an order to REST API.
+		  2. OrderProducer publishes an OrderPlacedEvent to Kafka topic "orders".
+		  3. OrderProcessor reads from "orders", enriches/validates, publishes
+		     to "orders-processed".
+		  4. NotificationConsumer reads from "orders-processed" and logs a
+		     simulated notification (email/SMS).
+		  5. All state is kept in an in-memory store for simplicity (no database
+		     required — the focus is the messaging layer, not persistence).
+	-->
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/>
+	</parent>
+
+	<groupId>com.example.cloudstream</groupId>
+	<artifactId>spring-cloud-stream</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>spring-cloud-stream</name>
+	<description>
+		Spring Boot mini-project demonstrating Spring Cloud Stream for event-driven
+		microservices. Uses the functional programming model (Supplier, Function,
+		Consumer) to publish and consume Kafka events without writing broker-specific
+		code. Includes an in-memory order store, a REST API to place orders, and a
+		three-stage pipeline: producer → processor → notification consumer.
+	</description>
+
+	<properties>
+		<java.version>21</java.version>
+		<!--
+			Spring Cloud BOM version aligned with Spring Boot 3.4.x.
+			This BOM pins all spring-cloud-* dependency versions so they
+			remain compatible with each other and with Spring Boot 3.4.x.
+		-->
+		<spring-cloud.version>2024.0.1</spring-cloud.version>
+		<!-- Testcontainers BOM version — pins all Testcontainers module versions in sync -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+
+	<dependencies>
+
+		<!--
+			Spring Boot Web (Spring MVC + embedded Tomcat):
+			Provides the REST API layer. Clients POST orders to /api/orders
+			and GET order status from /api/orders/{id}.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Validation (Bean Validation / Hibernate Validator):
+			Enables @Valid on controller method parameters and @NotBlank,
+			@Positive annotations on request DTOs.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Actuator:
+			Exposes /actuator/health and /actuator/info endpoints.
+			Used by Docker health checks and monitoring tools.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!--
+			Spring Cloud Stream (core binder abstraction):
+			The core library that defines the @EnableBinding abstraction,
+			the functional programming model, and all binder-agnostic features
+			such as content-type negotiation, error channels, and retry.
+
+			Spring Cloud Stream itself is broker-agnostic — the actual broker
+			connectivity is provided by a "binder" (see spring-cloud-stream-binder-kafka below).
+		-->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-stream</artifactId>
+		</dependency>
+
+		<!--
+			Spring Cloud Stream Kafka Binder:
+			Implements the Spring Cloud Stream binder contract for Apache Kafka.
+			It maps Spring Cloud Stream's logical channel names (bindings) to
+			Kafka topics and manages KafkaProducer / KafkaConsumer lifecycle.
+
+			With this binder, a java.util.function.Supplier<T> bean becomes a
+			Kafka producer, and a java.util.function.Consumer<T> bean becomes
+			a Kafka consumer — with zero boilerplate KafkaTemplate code.
+		-->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-stream-binder-kafka</artifactId>
+		</dependency>
+
+		<!--
+			Spring Kafka:
+			The underlying Spring integration library for Apache Kafka.
+			Provides KafkaTemplate (used internally by the Kafka binder),
+			@KafkaListener, and KafkaAdmin for topic management.
+			Also provides spring-kafka-test (EmbeddedKafka) for unit tests.
+		-->
+		<dependency>
+			<groupId>org.springframework.kafka</groupId>
+			<artifactId>spring-kafka</artifactId>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!--
+			Spring Boot Test:
+			Pulls in JUnit 5, AssertJ, Mockito, MockMvc, and all the Spring
+			test infrastructure required for unit and integration tests.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Spring Kafka Test:
+			Provides EmbeddedKafkaBroker and the @EmbeddedKafka annotation for
+			fast in-process Kafka tests that do NOT require Docker. Also provides
+			KafkaTestUtils for consumer-side utilities.
+
+			Used by unit tests to exercise the service layer with a real (embedded)
+			Kafka broker without starting any Docker containers.
+		-->
+		<dependency>
+			<groupId>org.springframework.kafka</groupId>
+			<artifactId>spring-kafka-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Spring Cloud Stream Test Binder:
+			Provides an in-memory test binder that replaces the Kafka binder
+			during unit tests. Allows sending and receiving messages on bindings
+			without any real broker. Useful for testing the functional beans
+			(Supplier / Function / Consumer) in complete isolation.
+		-->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-stream-test-binder</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers JUnit 5 integration:
+			Provides @Testcontainers (class-level) and @Container (field-level)
+			annotations that manage Docker container lifecycle alongside the
+			JUnit 5 test lifecycle.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers Kafka module:
+			Starts a real Kafka (Confluent) container for integration tests,
+			so we can verify the full Spring Cloud Stream pipeline against a
+			real Kafka broker rather than an in-memory substitute.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>kafka</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+	</dependencies>
+
+	<!--
+		Manage all Spring Cloud module versions through the BOM (Bill of Materials).
+		This ensures all spring-cloud-* artifacts resolve to a compatible set of
+		versions aligned with Spring Boot 3.4.x.
+	-->
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-dependencies</artifactId>
+				<version>${spring-cloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<!-- Manage all Testcontainers module versions via the BOM so they stay in sync -->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin: packages the application as an executable fat-jar -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+			<!--
+				Maven Surefire Plugin: configures test execution for Java 21+.
+
+				argLine breakdown:
+				  -XX:+EnableDynamicAgentLoading  - silences Mockito/ByteBuddy agent warnings
+				  -Xshare:off                     - disables class-data sharing (avoids conflicts)
+				  -Dnet.bytebuddy.experimental    - required on Java 25+; harmless on Java 21-24
+				  add-opens                       - grants ByteBuddy/Mockito deep reflection access
+
+				DOCKER_API_VERSION=1.44:
+				  Docker Desktop 29+ rejects the legacy v1.24 API path that docker-java uses by
+				  default. Setting 1.44 here (and in docker-java.properties on the test classpath)
+				  ensures Testcontainers works correctly on Docker Desktop 29+.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off -Dnet.bytebuddy.experimental=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<!-- Ensures docker-java uses API v1.44 (Docker Desktop 29+ requires this) -->
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>
