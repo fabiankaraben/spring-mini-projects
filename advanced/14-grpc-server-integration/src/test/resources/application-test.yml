@@ -1,0 +1,67 @@
+# =============================================================================
+# Test profile configuration for the gRPC Server Integration mini-project.
+#
+# This file is activated by @ActiveProfiles("test") in integration tests.
+# It overrides the default application.yml settings for the test environment.
+#
+# Key differences from the main profile:
+#   1. gRPC server binds to port 19090 (avoids conflicts with a running dev server).
+#   2. H2 console is disabled (not needed during automated tests).
+#   3. Hibernate DDL uses create-drop (fresh schema per test context).
+#   4. Logging is reduced to avoid test output noise.
+# =============================================================================
+
+spring:
+  application:
+    name: grpc-server-integration-test
+
+  # ---------------------------------------------------------------------------
+  # H2 in-memory database — same driver, separate named database for tests.
+  # ---------------------------------------------------------------------------
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      # create-drop: schema is created on context startup and dropped on shutdown.
+      # This guarantees a clean slate for each test context.
+      ddl-auto: create-drop
+    # Suppress SQL output in test logs — makes test output easier to read.
+    show-sql: false
+
+  h2:
+    console:
+      # Disable H2 console in tests — not needed and would waste startup time.
+      enabled: false
+
+# ---------------------------------------------------------------------------
+# HTTP server — random port assigned by @SpringBootTest(RANDOM_PORT).
+# The actual port is injected via @LocalServerPort in the test class.
+# ---------------------------------------------------------------------------
+server:
+  port: 0
+
+# ---------------------------------------------------------------------------
+# gRPC server — use a fixed non-default port for tests.
+# 19090 avoids clashing with the default dev gRPC port (9090).
+# The integration test connects to this port directly via ManagedChannelBuilder.
+# ---------------------------------------------------------------------------
+grpc:
+  server:
+    port: 19090
+    # Keep reflection enabled for test debugging (e.g., with grpcurl).
+    reflection:
+      enabled: true
+
+# ---------------------------------------------------------------------------
+# Reduce log noise during test execution.
+# ---------------------------------------------------------------------------
+logging:
+  level:
+    root: WARN
+    com.example.grpc: INFO
+    net.devh.boot.grpc: WARN
+    org.hibernate: WARN

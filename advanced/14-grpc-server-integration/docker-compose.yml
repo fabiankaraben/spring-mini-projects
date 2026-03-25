@@ -1,0 +1,86 @@
+# ============================================================================
+# Docker Compose file for the gRPC Server Integration mini-project.
+#
+# This file defines a single-service stack:
+#   1. app — The Spring Boot + gRPC server (built from Dockerfile)
+#
+# The application uses an H2 in-memory database, so no external database
+# container is needed. The Docker image embeds both servers:
+#   - HTTP server  (port 8080) — Spring Actuator health/info endpoints
+#   - gRPC server  (port 9090) — ProductCatalogService (Netty)
+#
+# Architecture:
+#   gRPC Client → app:9090  (ProductCatalogService — protobuf over HTTP/2)
+#   REST Client → app:8080  (Actuator /health, /info)
+#
+# Usage:
+#   docker compose up --build       # Build the app image and start
+#   docker compose up --build -d    # Same, but in detached (background) mode
+#   docker compose down             # Stop and remove containers
+#   docker compose logs -f          # Follow application logs
+#
+# Interacting with the gRPC server after startup (requires grpcurl):
+#   # List available gRPC services (reflection must be enabled):
+#   grpcurl -plaintext localhost:9090 list
+#
+#   # Describe the ProductCatalogService:
+#   grpcurl -plaintext localhost:9090 describe product.ProductCatalogService
+#
+#   # Create a product:
+#   grpcurl -plaintext -d '{"name":"Keyboard","description":"Mech keyboard","category":"electronics","price":89.99,"stock_quantity":100}' \
+#     localhost:9090 product.ProductCatalogService/CreateProduct
+#
+#   # Get a product by ID:
+#   grpcurl -plaintext -d '{"id":1}' localhost:9090 product.ProductCatalogService/GetProduct
+#
+#   # List all products:
+#   grpcurl -plaintext -d '{}' localhost:9090 product.ProductCatalogService/ListProducts
+#
+#   # List products by category:
+#   grpcurl -plaintext -d '{"category":"electronics"}' localhost:9090 product.ProductCatalogService/ListProducts
+#
+#   # Update stock:
+#   grpcurl -plaintext -d '{"id":1,"new_stock_quantity":50}' localhost:9090 product.ProductCatalogService/UpdateStock
+#
+#   # Delete a product (soft-delete):
+#   grpcurl -plaintext -d '{"id":1}' localhost:9090 product.ProductCatalogService/DeleteProduct
+#
+# Actuator health check:
+#   curl http://localhost:8080/actuator/health
+#
+# Note: Testcontainers integration tests do NOT use this file — they manage
+# the application context directly via @SpringBootTest. Run tests separately:
+#   ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # app — gRPC Server Integration application
+  #
+  # Built from the multi-stage Dockerfile in this project root.
+  # Exposes both the HTTP Actuator port (8080) and the gRPC port (9090).
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: grpc-server-integration-app
+    ports:
+      # HTTP port — Spring Actuator health/info endpoints
+      - "8080:8080"
+      # gRPC port — ProductCatalogService (Netty, protobuf over HTTP/2)
+      - "9090:9090"
+    environment:
+      # Disable ANSI colors in container log output (cleaner for Docker logs)
+      SPRING_OUTPUT_ANSI_ENABLED: "NEVER"
+      # Use the default (non-test) profile in Docker
+      SPRING_PROFILES_ACTIVE: "default"
+    healthcheck:
+      # Verify the HTTP Actuator /health endpoint returns "UP" status.
+      # wget is available in the alpine-based JRE image used in the runtime stage.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

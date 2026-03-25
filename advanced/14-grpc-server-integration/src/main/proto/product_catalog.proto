@@ -1,0 +1,190 @@
+// ============================================================================
+// product_catalog.proto
+//
+// Protocol Buffers (proto3) service definition for the Product Catalog gRPC service.
+//
+// What is a .proto file?
+//   A .proto file is the Interface Definition Language (IDL) for gRPC services.
+//   It defines:
+//     - Message types: the structured data exchanged between client and server
+//                      (equivalent to JSON schemas in REST APIs).
+//     - Service definitions: the RPC methods that the server exposes
+//                           (equivalent to REST endpoints).
+//
+// Code generation:
+//   The protoc compiler (triggered by protobuf-maven-plugin during `mvn compile`)
+//   reads this file and generates:
+//     - ProductCatalogServiceGrpc.java          — gRPC service stubs (blocking, async, future).
+//     - ProductRequest.java, ProductResponse.java, etc. — immutable message classes.
+//   Generated files appear in: target/generated-sources/protobuf/java/
+//
+// proto3 syntax:
+//   - All fields default to zero-value if not set (no required/optional keywords).
+//   - Field numbers (= 1, = 2, ...) identify fields in the binary encoding.
+//     They must never change once the .proto is deployed (backward compatibility).
+//   - Field names are snake_case by convention; Java code uses camelCase (generated).
+// ============================================================================
+
+syntax = "proto3";
+
+// Java package for the generated classes.
+// All message and service classes will be placed in this package.
+option java_package = "com.example.grpc.proto";
+
+// Place all generated classes in a single outer class file.
+// Without this, each message type gets its own top-level Java class.
+option java_multiple_files = true;
+
+// The Java class name of the outer wrapper class (used when java_multiple_files=false).
+// Even with java_multiple_files=true, this name is used for the gRPC stub class.
+option java_outer_classname = "ProductCatalogProto";
+
+// Proto package — used to avoid naming collisions when importing other .proto files.
+package product;
+
+// ============================================================================
+// Message Definitions
+// ============================================================================
+
+// ProductStatus — enumeration of possible product lifecycle states.
+//
+// Enumerations in proto3:
+//   - The first value must always have numeric value 0 (proto3 requirement).
+//   - 0 is used as the default value when no status is specified.
+enum ProductStatus {
+  // PRODUCT_STATUS_UNKNOWN — default zero value; used when no status is provided.
+  PRODUCT_STATUS_UNKNOWN = 0;
+  // PRODUCT_STATUS_ACTIVE — the product is available for purchase.
+  PRODUCT_STATUS_ACTIVE = 1;
+  // PRODUCT_STATUS_OUT_OF_STOCK — the product exists but has zero stock.
+  PRODUCT_STATUS_OUT_OF_STOCK = 2;
+  // PRODUCT_STATUS_DISCONTINUED — the product has been soft-deleted / retired.
+  PRODUCT_STATUS_DISCONTINUED = 3;
+}
+
+// Product — represents a single product entity in the catalog.
+//
+// Field numbers (= N) are the binary encoding identifiers.
+// They must remain stable across all versions of this schema.
+message Product {
+  // Unique numeric identifier assigned by the server on creation.
+  int64 id = 1;
+
+  // Human-readable product name (e.g., "Wireless Keyboard").
+  string name = 2;
+
+  // Short description of the product (e.g., "Ergonomic keyboard with USB dongle").
+  string description = 3;
+
+  // Product category used for grouping and filtering (e.g., "electronics").
+  string category = 4;
+
+  // Unit price in USD (e.g., 49.99).
+  double price = 5;
+
+  // Number of units currently in stock.
+  int32 stock_quantity = 6;
+
+  // Current lifecycle status of the product.
+  ProductStatus status = 7;
+}
+
+// CreateProductRequest — payload for creating a new product.
+// The server assigns the id; clients do not provide one.
+message CreateProductRequest {
+  // Product name (required, must not be blank).
+  string name = 1;
+
+  // Short description.
+  string description = 2;
+
+  // Product category (e.g., "electronics", "furniture").
+  string category = 3;
+
+  // Unit price in USD; must be > 0.
+  double price = 4;
+
+  // Initial stock quantity; must be >= 0.
+  int32 stock_quantity = 5;
+}
+
+// GetProductRequest — payload for fetching a product by its ID.
+message GetProductRequest {
+  // The numeric ID of the product to retrieve.
+  int64 id = 1;
+}
+
+// ListProductsRequest — payload for streaming a list of products.
+// An empty category field means "return all products".
+message ListProductsRequest {
+  // Optional: filter products by category. Empty string = no filter.
+  string category = 1;
+}
+
+// UpdateStockRequest — payload for adjusting a product's stock quantity.
+message UpdateStockRequest {
+  // The numeric ID of the product whose stock should be updated.
+  int64 id = 1;
+
+  // The new absolute stock quantity (replaces the current value).
+  int32 new_stock_quantity = 2;
+}
+
+// DeleteProductRequest — payload for soft-deleting a product.
+message DeleteProductRequest {
+  // The numeric ID of the product to delete.
+  int64 id = 1;
+}
+
+// DeleteProductResponse — result of a delete operation.
+message DeleteProductResponse {
+  // true if the product was found and deleted; false if not found.
+  bool success = 1;
+
+  // Human-readable message explaining the result.
+  string message = 2;
+}
+
+// ============================================================================
+// Service Definition
+// ============================================================================
+
+// ProductCatalogService — the gRPC service for managing the product catalog.
+//
+// RPC method types used here:
+//
+//   Unary RPC (most common):
+//     - Client sends ONE request message.
+//     - Server sends ONE response message.
+//     - Equivalent to a standard HTTP request/response.
+//     - Methods: GetProduct, CreateProduct, UpdateStock, DeleteProduct.
+//
+//   Server-Streaming RPC:
+//     - Client sends ONE request message.
+//     - Server sends a STREAM of response messages (zero or more).
+//     - The client reads from the stream until the server closes it.
+//     - Useful for returning large datasets without loading all into memory.
+//     - Method: ListProducts.
+service ProductCatalogService {
+
+  // GetProduct — retrieve a single product by its numeric ID (unary RPC).
+  // Returns the Product if found; throws NOT_FOUND status if it does not exist.
+  rpc GetProduct(GetProductRequest) returns (Product);
+
+  // ListProducts — stream all products, optionally filtered by category (server-streaming RPC).
+  // The server writes each Product into the stream as it queries them.
+  // An empty category in the request returns all products.
+  rpc ListProducts(ListProductsRequest) returns (stream Product);
+
+  // CreateProduct — create a new product and return the persisted entity (unary RPC).
+  // The server assigns the id and sets status = ACTIVE.
+  rpc CreateProduct(CreateProductRequest) returns (Product);
+
+  // UpdateStock — update the stock quantity of an existing product (unary RPC).
+  // Returns the updated Product. Throws NOT_FOUND if the product does not exist.
+  rpc UpdateStock(UpdateStockRequest) returns (Product);
+
+  // DeleteProduct — soft-delete a product by setting its status to DISCONTINUED (unary RPC).
+  // Returns a DeleteProductResponse indicating success or failure.
+  rpc DeleteProduct(DeleteProductRequest) returns (DeleteProductResponse);
+}
