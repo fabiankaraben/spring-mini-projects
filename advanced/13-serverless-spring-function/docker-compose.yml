@@ -1,0 +1,72 @@
+# ============================================================================
+# Docker Compose file for the Serverless Spring Function mini-project
+#
+# This file defines a single-service stack:
+#   1. app — The Spring Cloud Function application (built from Dockerfile)
+#
+# The application has NO external dependencies (no database, no message broker).
+# All business logic runs in-process. This Docker Compose file is only needed
+# to demonstrate the application running in a container — the same jar that
+# runs on AWS Lambda also runs as a local HTTP server.
+#
+# Architecture:
+#   REST Client → app:8080
+#     POST /calculateTax    → calculateTax function bean
+#     POST /applyDiscount   → applyDiscount function bean
+#     POST /generateInvoice → generateInvoice function bean
+#     POST /auditLogger     → auditLogger consumer bean (202 Accepted)
+#
+# Usage:
+#   docker compose up --build       # Build app image and start
+#   docker compose up --build -d    # Same, but in detached (background) mode
+#   docker compose down             # Stop and remove containers
+#   docker compose logs -f          # Follow application logs
+#
+# Accessing the application after startup:
+#   calculateTax:    POST http://localhost:8080/calculateTax
+#   applyDiscount:   POST http://localhost:8080/applyDiscount
+#   generateInvoice: POST http://localhost:8080/generateInvoice
+#   auditLogger:     POST http://localhost:8080/auditLogger
+#   Actuator health: GET  http://localhost:8080/actuator/health
+#
+# Note: Testcontainers integration tests (LocalStackLambdaIntegrationTest)
+# do NOT use this file — they manage their own Docker containers via the
+# Testcontainers library. Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # app — Serverless Spring Function application
+  #
+  # Built from the multi-stage Dockerfile in this project root.
+  # Spring Cloud Function's web adapter exposes each Function/Consumer bean
+  # at POST /{beanName} automatically — no REST controllers needed.
+  #
+  # Environment variables:
+  #   SPRING_CLOUD_FUNCTION_DEFINITION — lists all beans to activate (semicolons)
+  #   SERVER_PORT                      — HTTP port (default 8080)
+  #   SPRING_OUTPUT_ANSI_ENABLED       — disable ANSI colors in container logs
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: serverless-spring-function-app
+    ports:
+      # Expose port 8080 for REST API access from the host machine.
+      - "8080:8080"
+    environment:
+      # Explicitly list all function beans to activate.
+      # Multiple bean names separated by semicolons.
+      SPRING_CLOUD_FUNCTION_DEFINITION: calculateTax;applyDiscount;generateInvoice;auditLogger
+      # Disable ANSI colors in container log output (cleaner for Docker logs)
+      SPRING_OUTPUT_ANSI_ENABLED: "NEVER"
+    healthcheck:
+      # Verify the application is healthy by polling the Spring Actuator health endpoint.
+      # wget is available in the alpine-based JRE image.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!--
+		Serverless Spring Function mini-project.
+
+		This project demonstrates how to package Spring Boot business logic as
+		functions that can be deployed to AWS Lambda using Spring Cloud Function.
+
+		Spring Cloud Function is a framework that:
+		  - Promotes the implementation of business logic via functions
+		    (java.util.function.Function, Supplier, Consumer).
+		  - Abstracts away the target runtime — the same function code runs on:
+		      * A local HTTP server (Spring Boot web)
+		      * AWS Lambda (via the spring-cloud-function-adapter-aws module)
+		      * Azure Functions, Google Cloud Functions, etc.
+
+		Domain scenario: an invoice processing pipeline for an e-commerce platform.
+		  Functions provided:
+		    1. calculateTax     — Function<OrderRequest, TaxResult>
+		                          Calculates tax amount and net price for an order.
+		    2. applyDiscount    — Function<DiscountRequest, DiscountResult>
+		                          Applies promotional discount codes to an order total.
+		    3. generateInvoice  — Function<InvoiceRequest, Invoice>
+		                          Combines tax + discount logic to produce a full invoice.
+		    4. auditLogger      — Consumer<AuditEvent>
+		                          Logs audit events (fire-and-forget, no response).
+
+		Local HTTP exposure:
+		  Spring Cloud Function auto-exposes every Function/Consumer/Supplier bean
+		  at HTTP endpoints when spring-boot-starter-web is on the classpath:
+		    POST /calculateTax        → calls calculateTax function
+		    POST /applyDiscount       → calls applyDiscount function
+		    POST /generateInvoice     → calls generateInvoice function
+		    POST /auditLogger         → calls auditLogger consumer (returns 202)
+
+		AWS Lambda deployment:
+		  Replacing the starter-web dependency with the AWS adapter and deploying
+		  as a zip/jar to Lambda lets the same function beans handle Lambda events.
+		  The FUNCTION_NAME environment variable selects which bean handles requests.
+	-->
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/>
+	</parent>
+
+	<groupId>com.example.serverless</groupId>
+	<artifactId>serverless-spring-function</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>serverless-spring-function</name>
+	<description>
+		Spring Boot mini-project demonstrating Spring Cloud Function for serverless
+		deployments. Business logic is packaged as java.util.function.Function beans
+		that run locally via HTTP or can be deployed to AWS Lambda with zero code changes.
+		Includes an invoice/tax calculation domain, JUnit 5 unit tests, and full
+		integration tests using Testcontainers with LocalStack (AWS Lambda simulator).
+	</description>
+
+	<properties>
+		<java.version>21</java.version>
+
+		<!--
+			Spring Cloud BOM version aligned with Spring Boot 3.4.x.
+			Pins all spring-cloud-* dependency versions for mutual compatibility.
+		-->
+		<spring-cloud.version>2024.0.1</spring-cloud.version>
+
+		<!-- AWS SDK BOM — pins all AWS SDK v2 module versions in sync -->
+		<aws.sdk.version>2.29.52</aws.sdk.version>
+
+		<!-- Testcontainers BOM version — pins all Testcontainers module versions in sync -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+
+	<dependencies>
+
+		<!--
+			Spring Boot Web (Spring MVC + embedded Tomcat):
+			Provides the local HTTP server that auto-exposes every Spring Cloud
+			Function bean at a POST endpoint matching the bean name.
+			E.g., a bean named "calculateTax" is available at POST /calculateTax.
+
+			For production Lambda deployment, this dependency would be replaced by:
+			  spring-cloud-function-adapter-aws (AWS Lambda adapter)
+			This project includes both for demonstration purposes — the web adapter
+			is used for local development and Docker Compose, while the AWS adapter
+			is included as a provided-scope dependency to show how the JAR would be
+			built for Lambda deployment.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Actuator:
+			Exposes /actuator/health and /actuator/info endpoints.
+			Used by Docker health checks and monitoring tools.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!--
+			Spring Cloud Function Web:
+			The core Spring Cloud Function module + web adapter.
+			This is what auto-exposes Function/Consumer/Supplier beans as HTTP endpoints.
+
+			Key features:
+			  - BeanFactoryAwareFunctionRegistry: discovers and manages all functional beans.
+			  - FunctionCatalog: provides a lookup API to retrieve functions by name.
+			  - Automatic HTTP routing: POST /{functionName} → bean invocation.
+			  - Content-type negotiation: JSON, plain text, bytes.
+			  - Function composition: POST /functionA,functionB chains two functions.
+		-->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-function-web</artifactId>
+		</dependency>
+
+		<!--
+			Spring Cloud Function AWS Adapter (provided scope):
+			The adapter that bridges AWS Lambda's RequestHandler interface to
+			Spring Cloud Function's FunctionCatalog.
+
+			Provided scope means it is included in the classpath at compile time
+			(so we can reference its classes) but NOT packaged in the default fat-jar.
+			For a real Lambda deployment you would create a separate Maven profile or
+			build task that assembles a deployment zip with this adapter included.
+
+			How it works at Lambda runtime:
+			  - AWS invokes SpringBootRequestHandler (the Lambda handler class).
+			  - The adapter looks up the SPRING_CLOUD_FUNCTION_DEFINITION env var
+			    to determine which function bean to call.
+			  - It passes the Lambda event payload through the function and returns
+			    the function's output as the Lambda response.
+		-->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-function-adapter-aws</artifactId>
+			<scope>provided</scope>
+		</dependency>
+
+		<!--
+			Spring Boot Validation (Bean Validation / Hibernate Validator):
+			Enables @Valid on request DTOs and constraint annotations
+			(@NotNull, @DecimalMin, @NotBlank) for input validation.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!--
+			Spring Boot Test:
+			Pulls in JUnit 5, AssertJ, Mockito, MockMvc, and all the Spring
+			test infrastructure required for unit and integration tests.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers JUnit 5 integration:
+			Provides @Testcontainers (class-level) and @Container (field-level)
+			annotations that manage Docker container lifecycle alongside the
+			JUnit 5 test lifecycle.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers LocalStack module:
+			Starts a LocalStack container (AWS service simulator) for integration tests.
+			LocalStack simulates the AWS Lambda invocation environment locally, allowing
+			us to test function deployment and invocation without a real AWS account.
+
+			What LocalStack provides for this project:
+			  - AWS Lambda API: create/invoke functions via the AWS SDK
+			  - AWS IAM: create execution roles
+			  - (Optionally) S3, SQS, SNS — not needed here but available
+
+			This allows us to verify:
+			  1. The fat-jar can be deployed as a Lambda function.
+			  2. The function can be invoked through LocalStack's Lambda endpoint.
+			  3. The response matches the expected output.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>localstack</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			AWS SDK v2 Lambda client (test scope):
+			Used in integration tests to deploy and invoke Lambda functions
+			against the LocalStack container.
+
+			The SDK client is configured to point to LocalStack's endpoint URL
+			(http://localhost:{mapped-port}) instead of real AWS endpoints.
+		-->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>lambda</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			AWS SDK v2 IAM client (test scope):
+			Used in integration tests to create the IAM execution role that
+			Lambda requires. LocalStack simulates IAM without real credentials.
+		-->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>iam</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+	</dependencies>
+
+	<!--
+		Manage all Spring Cloud module versions through the BOM (Bill of Materials).
+		This ensures all spring-cloud-* artifacts resolve to a compatible set of
+		versions aligned with Spring Boot 3.4.x.
+	-->
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-dependencies</artifactId>
+				<version>${spring-cloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<!-- AWS SDK v2 BOM: pins all software.amazon.awssdk module versions in sync -->
+			<dependency>
+				<groupId>software.amazon.awssdk</groupId>
+				<artifactId>bom</artifactId>
+				<version>${aws.sdk.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<!-- Testcontainers BOM: pins all Testcontainers module versions in sync -->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<build>
+		<plugins>
+			<!--
+				Spring Boot Maven Plugin:
+				Packages the application as an executable fat-jar (uber-jar) that
+				contains all dependencies. This fat-jar can run locally with 'java -jar'
+				and can also be uploaded to AWS Lambda as a deployment package.
+			-->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+			<!--
+				Maven Surefire Plugin: configures test execution for Java 21+.
+
+				argLine breakdown:
+				  -XX:+EnableDynamicAgentLoading  silences Mockito/ByteBuddy agent warnings
+				  -Xshare:off                     disables class-data sharing (avoids conflicts)
+				  -Dnet.bytebuddy.experimental    required on Java 25+; harmless on Java 21-24
+				  add-opens flags                 grant ByteBuddy/Mockito deep reflection access
+
+				DOCKER_API_VERSION=1.44:
+				  Docker Desktop 29+ rejects the legacy v1.24 API path that docker-java uses by
+				  default. Setting 1.44 here (and in docker-java.properties on the test classpath)
+				  ensures Testcontainers works correctly on Docker Desktop 29+.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off -Dnet.bytebuddy.experimental=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<!-- Ensures docker-java uses API v1.44 (Docker Desktop 29+ requires this) -->
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

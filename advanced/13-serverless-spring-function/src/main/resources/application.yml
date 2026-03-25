@@ -1,0 +1,77 @@
+# =============================================================================
+# Serverless Spring Function — Application Configuration
+#
+# This file configures:
+#   1. The Spring Boot application name and port
+#   2. Spring Cloud Function endpoint exposure and function definitions
+#   3. Jackson serialization settings (ISO-8601 dates)
+#   4. Actuator endpoints for health checks
+#   5. Logging levels
+#
+# Spring Cloud Function auto-exposes each Function/Consumer/Supplier bean
+# as an HTTP POST endpoint when spring-cloud-function-web is on the classpath:
+#
+#   POST /calculateTax    → calculateTax bean (Function<OrderRequest, TaxResult>)
+#   POST /applyDiscount   → applyDiscount bean (Function<DiscountRequest, DiscountResult>)
+#   POST /generateInvoice → generateInvoice bean (Function<InvoiceRequest, Invoice>)
+#   POST /auditLogger     → auditLogger bean (Consumer<AuditEvent>) → 202 Accepted
+#
+# For AWS Lambda deployment, the SPRING_CLOUD_FUNCTION_DEFINITION environment
+# variable selects which bean handles Lambda invocations.
+# =============================================================================
+
+spring:
+  application:
+    name: serverless-spring-function
+
+  # ---------------------------------------------------------------------------
+  # Spring Cloud Function configuration
+  #
+  # spring.cloud.function.definition:
+  #   Lists all functional beans to activate. When multiple Function/Consumer
+  #   beans exist, this property prevents Spring Cloud Function from throwing
+  #   "Multiple functional beans were found" ambiguity errors.
+  #
+  #   Multiple bean names are separated by semicolons.
+  #   For function composition, use a pipe: "calculateTax|applyDiscount"
+  # ---------------------------------------------------------------------------
+  cloud:
+    function:
+      definition: calculateTax;applyDiscount;generateInvoice;auditLogger
+
+  # ---------------------------------------------------------------------------
+  # Jackson configuration
+  # ---------------------------------------------------------------------------
+  jackson:
+    # Serialize java.time.Instant as ISO-8601 strings (e.g., "2024-04-05T12:34:56Z")
+    # instead of epoch millisecond numbers. This makes the JSON more readable
+    # and avoids timezone ambiguity.
+    serialization:
+      write-dates-as-timestamps: false
+
+# -----------------------------------------------------------------------------
+# Server
+# -----------------------------------------------------------------------------
+server:
+  port: 8080
+
+# -----------------------------------------------------------------------------
+# Actuator
+# Exposes /actuator/health for Docker health checks and monitoring.
+# -----------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+logging:
+  level:
+    com.example.serverless: DEBUG
+    org.springframework.cloud.function: INFO
