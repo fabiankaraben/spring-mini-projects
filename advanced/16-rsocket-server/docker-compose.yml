@@ -1,0 +1,63 @@
+# ============================================================================
+# Docker Compose file for the RSocket Server mini-project.
+#
+# This file defines a single-service stack:
+#   1. app — The Spring Boot + RSocket server (built from Dockerfile)
+#
+# The application uses an H2 in-memory database, so no external database
+# container is needed. The Docker image runs two servers simultaneously:
+#   - RSocket TCP server (port 7000) — all four interaction model routes
+#   - HTTP server        (port 8080) — Spring Actuator health/info endpoints
+#
+# Architecture:
+#   RSocket Client → app:7000  (stock.quote, stock.stream, stock.trade, stock.alerts)
+#   REST Client    → app:8080  (Actuator /health, /info)
+#
+# Usage:
+#   docker compose up --build       # Build the app image and start
+#   docker compose up --build -d    # Same, but in detached (background) mode
+#   docker compose down             # Stop and remove containers
+#   docker compose logs -f          # Follow application logs
+#
+# Interacting with the RSocket server requires an RSocket-capable client.
+# See README.md for rsc (RSocket CLI) usage examples.
+#
+# Actuator health check:
+#   curl http://localhost:8080/actuator/health
+#
+# Note: Testcontainers integration tests do NOT use this file — they manage
+# the application context directly via @SpringBootTest. Run tests separately:
+#   ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # app — RSocket Server application
+  #
+  # Built from the multi-stage Dockerfile in this project root.
+  # Exposes both the RSocket TCP port (7000) and the HTTP Actuator port (8080).
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rsocket-server-app
+    ports:
+      # RSocket TCP port — all four interaction model routes
+      - "7000:7000"
+      # HTTP port — Spring Actuator health/info endpoints
+      - "8080:8080"
+    environment:
+      # Disable ANSI colors in container log output (cleaner for Docker logs)
+      SPRING_OUTPUT_ANSI_ENABLED: "NEVER"
+      # Use the default (non-test) Spring profile in Docker
+      SPRING_PROFILES_ACTIVE: "default"
+    healthcheck:
+      # Verify the HTTP Actuator /health endpoint returns "UP" status.
+      # wget is available in the alpine-based JRE image used in the runtime stage.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

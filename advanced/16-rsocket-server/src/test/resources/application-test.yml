@@ -1,0 +1,64 @@
+# =============================================================================
+# Test profile configuration for the RSocket Server mini-project.
+#
+# This file is activated by @ActiveProfiles("test") in integration tests.
+# It overrides the default application.yml settings for the test environment.
+#
+# Key differences from the main profile:
+#   1. RSocket server binds to port 17000 (avoids conflicts with a running dev server).
+#   2. H2 console is disabled (not needed during automated tests).
+#   3. Hibernate DDL uses create-drop (fresh schema per test context).
+#   4. SQL logging reduced to avoid test output noise.
+# =============================================================================
+
+spring:
+  application:
+    name: rsocket-server-test
+
+  # ---------------------------------------------------------------------------
+  # H2 in-memory database — separate named database for test isolation.
+  # ---------------------------------------------------------------------------
+  datasource:
+    url: jdbc:h2:mem:stockmarket_test;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      # create-drop: schema is created on context startup and dropped on shutdown.
+      # Guarantees a clean slate for each test context.
+      ddl-auto: create-drop
+    # Suppress SQL in test logs for cleaner output.
+    show-sql: false
+
+  h2:
+    console:
+      # Disable H2 console in tests — not needed.
+      enabled: false
+
+  # ---------------------------------------------------------------------------
+  # RSocket server — fixed non-default port for tests.
+  # 17000 avoids clashing with the default dev RSocket port (7000).
+  # The integration test connects to this port via RSocketRequester.
+  # ---------------------------------------------------------------------------
+  rsocket:
+    server:
+      port: 17000
+      transport: tcp
+
+# ---------------------------------------------------------------------------
+# HTTP server — random port assigned by @SpringBootTest(RANDOM_PORT).
+# ---------------------------------------------------------------------------
+server:
+  port: 0
+
+# ---------------------------------------------------------------------------
+# Reduce log noise during test execution.
+# ---------------------------------------------------------------------------
+logging:
+  level:
+    root: WARN
+    com.example.rsocket: INFO
+    org.springframework.messaging.rsocket: WARN
+    org.hibernate: WARN
