@@ -1,0 +1,141 @@
+// ============================================================================
+// order_service.proto
+//
+// Protocol Buffers (proto3) service definition for the Order gRPC service.
+//
+// This file defines the contract between the gRPC server (OrderGrpcService)
+// and the gRPC clients that call it (@GrpcClient-injected stubs in the
+// REST gateway layer).
+//
+// Code generation:
+//   protobuf-maven-plugin (triggered at mvn compile) reads this file and generates:
+//     - OrderServiceGrpc.java          — gRPC stubs (blocking, async, future).
+//     - Order.java, CreateOrderRequest.java, etc. — immutable protobuf message classes.
+//   Generated files appear in: target/generated-sources/protobuf/java/
+//
+// RPC methods provided:
+//   1. CreateOrder  — create a new order (unary RPC).
+//   2. GetOrder     — retrieve an order by ID (unary RPC).
+//   3. ListOrders   — stream all orders for a customer (server-streaming RPC).
+// ============================================================================
+
+syntax = "proto3";
+
+// Java package for generated classes.
+option java_package = "com.example.grpcclient.proto";
+
+// Each message and service gets its own top-level Java class file.
+option java_multiple_files = true;
+
+// Outer wrapper class name (used by the gRPC stub class name).
+option java_outer_classname = "OrderServiceProto";
+
+// Proto package — prevents naming collisions when importing other .proto files.
+package order;
+
+// ============================================================================
+// Enumerations
+// ============================================================================
+
+// OrderStatus — lifecycle state of an order.
+//
+// proto3 requires the first enum value to be 0 (the default).
+enum OrderStatus {
+  // Default zero value — order status is not set / unknown.
+  ORDER_STATUS_UNKNOWN = 0;
+  // Order has been placed and is waiting to be processed.
+  ORDER_STATUS_PENDING = 1;
+  // Order has been confirmed and inventory reserved.
+  ORDER_STATUS_CONFIRMED = 2;
+  // Order has been shipped to the customer.
+  ORDER_STATUS_SHIPPED = 3;
+  // Order has been delivered.
+  ORDER_STATUS_DELIVERED = 4;
+  // Order was cancelled before shipment.
+  ORDER_STATUS_CANCELLED = 5;
+}
+
+// ============================================================================
+// Message Definitions
+// ============================================================================
+
+// OrderItem — a single line item within an order.
+message OrderItem {
+  // SKU (Stock Keeping Unit) of the product being ordered.
+  string sku = 1;
+
+  // Human-readable product name.
+  string product_name = 2;
+
+  // Number of units ordered.
+  int32 quantity = 3;
+
+  // Unit price in USD at the time of ordering.
+  double unit_price = 4;
+}
+
+// Order — the complete order entity returned from the server.
+message Order {
+  // Server-assigned unique order identifier.
+  string order_id = 1;
+
+  // Customer who placed the order.
+  string customer_id = 2;
+
+  // List of items in this order.
+  repeated OrderItem items = 3;
+
+  // Total order amount in USD (sum of quantity * unit_price for all items).
+  double total_amount = 4;
+
+  // Current lifecycle status of the order.
+  OrderStatus status = 5;
+
+  // ISO-8601 timestamp of when the order was created.
+  string created_at = 6;
+}
+
+// CreateOrderRequest — payload for placing a new order.
+message CreateOrderRequest {
+  // Customer placing the order (required, must not be blank).
+  string customer_id = 1;
+
+  // One or more items to include in the order (at least one required).
+  repeated OrderItem items = 2;
+}
+
+// GetOrderRequest — payload for fetching an order by ID.
+message GetOrderRequest {
+  // The unique order identifier to retrieve.
+  string order_id = 1;
+}
+
+// ListOrdersRequest — payload for streaming all orders for a customer.
+message ListOrdersRequest {
+  // The customer whose orders should be streamed.
+  string customer_id = 1;
+}
+
+// ============================================================================
+// Service Definition
+// ============================================================================
+
+// OrderService — gRPC service for order management.
+//
+// RPC types used:
+//   Unary RPC:          client sends one request, server sends one response.
+//   Server-Streaming:   client sends one request, server streams N responses.
+service OrderService {
+
+  // CreateOrder — place a new order (unary RPC).
+  // Returns the created Order with a server-assigned ID and PENDING status.
+  rpc CreateOrder(CreateOrderRequest) returns (Order);
+
+  // GetOrder — retrieve a single order by ID (unary RPC).
+  // Returns NOT_FOUND if the order does not exist.
+  rpc GetOrder(GetOrderRequest) returns (Order);
+
+  // ListOrders — stream all orders for a customer (server-streaming RPC).
+  // Each Order is streamed individually; the stream closes when all are sent.
+  rpc ListOrders(ListOrdersRequest) returns (stream Order);
+}

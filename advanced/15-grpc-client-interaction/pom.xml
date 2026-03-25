@@ -1,0 +1,376 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!--
+		gRPC Client Interaction mini-project.
+
+		This project demonstrates how a Spring Boot backend consumes internal
+		microservices using gRPC channels (the CLIENT side of gRPC communication).
+
+		Architecture overview:
+		  ┌─────────────────────────────────────────────────────────────────────┐
+		  │                  Spring Boot Application (port 8080)               │
+		  │                                                                     │
+		  │  REST API (Spring MVC)          gRPC Servers (Netty)               │
+		  │  ┌─────────────────┐            ┌──────────────────────────┐       │
+		  │  │ OrderController │──gRPC──►   │ OrderService   (9091)    │       │
+		  │  │ (HTTP /orders)  │            │ InventoryService (9092)  │       │
+		  │  └─────────────────┘            └──────────────────────────┘       │
+		  │          │                              ▲                          │
+		  │          └──────────────────────────────┘                          │
+		  │          (gRPC client stubs via @GrpcClient)                        │
+		  └─────────────────────────────────────────────────────────────────────┘
+
+		What is demonstrated:
+		  1. gRPC CLIENT configuration — how to define gRPC channels in application.yml
+		     using net.devh:grpc-client-spring-boot-starter auto-configuration.
+		  2. @GrpcClient injection — how to inject generated blocking/async stubs
+		     directly into Spring beans using the @GrpcClient annotation.
+		  3. Multi-service fan-out — how a single HTTP request triggers TWO gRPC calls
+		     to separate services (create order + reserve inventory).
+		  4. gRPC error handling — how to catch StatusRuntimeException and translate
+		     gRPC status codes into appropriate HTTP responses.
+		  5. Server-streaming gRPC — the InventoryService streams items back
+		     and the client collects them into a list.
+
+		Domain scenario: an e-commerce Order Management system.
+		  - Orders Service   — create/get/list orders (port 9091).
+		  - Inventory Service — reserve/release/list inventory items (port 9092).
+		  - REST Gateway     — HTTP API that orchestrates both gRPC services (port 8080).
+
+		Port layout:
+		  8080 — Spring Boot HTTP REST API + Spring Actuator
+		  9091 — gRPC OrderService (Netty)
+		  9092 — gRPC InventoryService (Netty)
+	-->
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/>
+	</parent>
+
+	<groupId>com.example.grpcclient</groupId>
+	<artifactId>grpc-client-interaction</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>grpc-client-interaction</name>
+	<description>
+		Spring Boot mini-project demonstrating gRPC client interaction — a REST API gateway
+		that consumes two internal microservices (Order and Inventory) using gRPC channels
+		with @GrpcClient-injected stubs, server-streaming RPCs, and gRPC error handling.
+		Includes JUnit 5 unit tests and full Testcontainers integration tests.
+	</description>
+
+	<properties>
+		<java.version>21</java.version>
+
+		<!--
+			grpc-spring-boot-starter version.
+			Provides both:
+			  - grpc-server-spring-boot-starter (auto-configures Netty gRPC servers).
+			  - grpc-client-spring-boot-starter (auto-configures gRPC channels + @GrpcClient).
+		-->
+		<grpc-spring-boot-starter.version>3.1.0.RELEASE</grpc-spring-boot-starter.version>
+
+		<!--
+			Protocol Buffers Java runtime version.
+			Must be kept in sync with the version used by the gRPC libraries.
+		-->
+		<protobuf.version>3.25.5</protobuf.version>
+
+		<!--
+			gRPC Java library version.
+			Provides the core gRPC runtime, stub generation support, and Netty transport.
+		-->
+		<grpc.version>1.68.1</grpc.version>
+
+		<!--
+			Testcontainers BOM version — pins all Testcontainers module versions in sync.
+		-->
+		<testcontainers.version>1.21.3</testcontainers.version>
+
+		<!--
+			protobuf-maven-plugin version.
+			Runs protoc + grpc-java plugin at build time to generate Java stubs from .proto files.
+		-->
+		<protobuf-maven-plugin.version>0.6.1</protobuf-maven-plugin.version>
+
+		<!--
+			os-maven-plugin version.
+			Detects the current OS/architecture so the correct protoc binary is downloaded.
+		-->
+		<os-maven-plugin.version>1.7.1</os-maven-plugin.version>
+	</properties>
+
+	<dependencies>
+
+		<!--
+			Spring Boot Web (Spring MVC + embedded Tomcat):
+			Provides the HTTP REST API on port 8080.
+			The gRPC servers run on separate ports (9091, 9092) via Netty.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Actuator:
+			Exposes /actuator/health and /actuator/info on port 8080.
+			Used by Docker health checks to verify the application is ready.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!--
+			Spring Data JPA + Hibernate:
+			Persistence layer for storing orders and inventory items in H2.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+
+		<!--
+			H2 in-memory database:
+			Lightweight embedded SQL database for the demo.
+			All data resets on application restart.
+		-->
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
+		<!--
+			grpc-server-spring-boot-starter (net.devh):
+			Auto-configures the Netty-based gRPC servers.
+			Scans for @GrpcService-annotated classes and registers them.
+			The two gRPC servers (order + inventory) are bound on separate ports
+			configured in application.yml.
+		-->
+		<dependency>
+			<groupId>net.devh</groupId>
+			<artifactId>grpc-server-spring-boot-starter</artifactId>
+			<version>${grpc-spring-boot-starter.version}</version>
+		</dependency>
+
+		<!--
+			grpc-client-spring-boot-starter (net.devh):
+			Auto-configures gRPC channel beans and stub injection.
+			Key features:
+			  - Reads grpc.client.<name>.address from application.yml to create channels.
+			  - @GrpcClient("<name>") injects a managed channel stub into Spring beans.
+			  - Supports load balancing, interceptors, TLS, and retry configuration.
+			  - The stub is lazily initialized and reused across requests.
+		-->
+		<dependency>
+			<groupId>net.devh</groupId>
+			<artifactId>grpc-client-spring-boot-starter</artifactId>
+			<version>${grpc-spring-boot-starter.version}</version>
+		</dependency>
+
+		<!--
+			Protocol Buffers Java runtime:
+			Core library for serializing and deserializing protobuf messages.
+		-->
+		<dependency>
+			<groupId>com.google.protobuf</groupId>
+			<artifactId>protobuf-java</artifactId>
+			<version>${protobuf.version}</version>
+		</dependency>
+
+		<!--
+			protobuf-java-util:
+			Provides JsonFormat for converting protobuf messages to/from JSON.
+			Useful for debugging REST responses that mirror gRPC responses.
+		-->
+		<dependency>
+			<groupId>com.google.protobuf</groupId>
+			<artifactId>protobuf-java-util</artifactId>
+			<version>${protobuf.version}</version>
+		</dependency>
+
+		<!--
+			javax.annotation-api:
+			The gRPC Java protoc plugin emits @javax.annotation.Generated on generated stubs.
+			This annotation was removed from the JDK in Java 9+; this dependency restores it.
+		-->
+		<dependency>
+			<groupId>javax.annotation</groupId>
+			<artifactId>javax.annotation-api</artifactId>
+			<version>1.3.2</version>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!--
+			Spring Boot Test:
+			Pulls in JUnit 5, AssertJ, Mockito, MockMvc, and Spring test infrastructure.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers JUnit 5 integration:
+			@Testcontainers + @Container annotations manage Docker container lifecycle
+			alongside the JUnit 5 test lifecycle.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers core:
+			Provides GenericContainer and the Docker client integration.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+	</dependencies>
+
+	<!--
+		Manage Testcontainers module versions through the BOM (Bill of Materials).
+		This ensures all testcontainers:* artifacts resolve to a compatible version set.
+	-->
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<build>
+
+		<!--
+			os-maven-plugin (build extension):
+			Detects the current OS and CPU architecture (e.g., linux-x86_64, osx-aarch_64)
+			and sets the ${os.detected.classifier} property. The protobuf-maven-plugin uses
+			this classifier to download the correct native protoc binary for the build host.
+		-->
+		<extensions>
+			<extension>
+				<groupId>kr.motd.maven</groupId>
+				<artifactId>os-maven-plugin</artifactId>
+				<version>${os-maven-plugin.version}</version>
+			</extension>
+		</extensions>
+
+		<plugins>
+
+			<!--
+				Spring Boot Maven Plugin:
+				Packages the application as an executable fat-jar with all dependencies embedded.
+			-->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+			<!--
+				protobuf-maven-plugin (xolstice):
+				Invokes the protoc compiler at build time to generate Java source code
+				from .proto files located in src/main/proto/.
+
+				Two .proto files are compiled:
+				  - order_service.proto    → OrderServiceGrpc + message classes
+				  - inventory_service.proto → InventoryServiceGrpc + message classes
+
+				Generated sources are placed in target/generated-sources/protobuf/java/
+				and are automatically included in the Maven compilation classpath.
+			-->
+			<plugin>
+				<groupId>org.xolstice.maven.plugins</groupId>
+				<artifactId>protobuf-maven-plugin</artifactId>
+				<version>${protobuf-maven-plugin.version}</version>
+				<configuration>
+					<!--
+						Download the correct protoc binary for the current OS/arch.
+						${os.detected.classifier} is set by the os-maven-plugin extension above.
+					-->
+					<protocArtifact>
+						com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}
+					</protocArtifact>
+					<!--
+						Output directory for generated protobuf message classes.
+					-->
+					<outputDirectory>${project.build.directory}/generated-sources/protobuf/java</outputDirectory>
+					<!--
+						Do not clear the output directory between executions — both proto files
+						share the same output directory.
+					-->
+					<clearOutputDirectory>false</clearOutputDirectory>
+				</configuration>
+				<executions>
+					<execution>
+						<id>compile-protobuf</id>
+						<goals>
+							<!-- Generate Java message classes from .proto files -->
+							<goal>compile</goal>
+							<!-- Generate gRPC service stubs using the grpc-java plugin -->
+							<goal>compile-custom</goal>
+						</goals>
+						<configuration>
+							<!--
+								The grpc-java protoc plugin binary.
+								Generates: abstract service ImplBase, blocking stub, future stub,
+								and async stub from the service definitions in .proto files.
+							-->
+							<pluginId>grpc-java</pluginId>
+							<pluginArtifact>
+								io.grpc:protoc-gen-grpc-java:${grpc.version}:exe:${os.detected.classifier}
+							</pluginArtifact>
+							<outputDirectory>${project.build.directory}/generated-sources/protobuf/java</outputDirectory>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<!--
+				Maven Surefire Plugin: configures test execution for Java 21+.
+
+				argLine breakdown:
+			  -XX:+EnableDynamicAgentLoading  silences Mockito/ByteBuddy agent warnings on Java 21+
+			  -Xshare:off                     disables class-data sharing (avoids rare JVM conflicts)
+			  -Dnet.bytebuddy.experimental    required on Java 25+; harmless on Java 21 to 24
+			  add-opens flags                 grant ByteBuddy/Mockito deep reflection access
+
+			DOCKER_API_VERSION=1.44:
+			  Docker Desktop 29+ rejects the legacy v1.24 API path used by docker-java.
+			  Setting 1.44 here (and in docker-java.properties on the test classpath)
+			  ensures Testcontainers works correctly on Docker Desktop 29+.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off -Dnet.bytebuddy.experimental=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<!-- Ensures docker-java uses API v1.44 (Docker Desktop 29+ requires this) -->
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+
+		</plugins>
+	</build>
+
+</project>

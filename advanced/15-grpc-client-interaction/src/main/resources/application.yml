@@ -1,0 +1,137 @@
+# =============================================================================
+# Application configuration for the gRPC Client Interaction mini-project.
+#
+# Three servers are active when this application launches:
+#   1. Spring Boot HTTP server — port 8080 (REST API + Actuator endpoints).
+#   2. gRPC server             — port 9091 (Netty, hosts OrderService + InventoryService).
+#
+# gRPC CLIENT channels are also configured here (grpc.client.*):
+#   The net.devh grpc-client-spring-boot-starter reads these entries and creates
+#   managed gRPC channels that are injected via @GrpcClient into Spring beans.
+#
+# Key concept — in-process gRPC:
+#   The gRPC server and the gRPC client are in the SAME JVM process.
+#   The client connects to localhost:9091 where the server is listening.
+#   This self-contained setup is ideal for demos and allows the integration tests
+#   to verify the full gRPC call stack without external services.
+# =============================================================================
+
+spring:
+
+  application:
+    # Application name shown in logs and Actuator /info.
+    name: grpc-client-interaction
+
+  # ---------------------------------------------------------------------------
+  # JPA / Hibernate configuration
+  # ---------------------------------------------------------------------------
+  jpa:
+    # create-drop: drop and re-create schema on startup/shutdown.
+    # Fine for this demo. Use Flyway/Liquibase + 'validate' or 'none' in production.
+    hibernate:
+      ddl-auto: create-drop
+
+    # Show generated SQL in logs (useful for development; disable in production).
+    show-sql: true
+
+    properties:
+      hibernate:
+        # Format multi-line SQL for readability in logs.
+        format_sql: true
+
+  # ---------------------------------------------------------------------------
+  # H2 in-memory database configuration
+  # ---------------------------------------------------------------------------
+  datasource:
+    # H2 in-memory URL. Data lives only for the duration of the JVM process.
+    url: jdbc:h2:mem:grpcclientdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # H2 web console — accessible at /h2-console for development inspection.
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# ---------------------------------------------------------------------------
+# Spring Boot HTTP server (REST API + Actuator).
+# ---------------------------------------------------------------------------
+server:
+  port: 8080
+
+# ---------------------------------------------------------------------------
+# gRPC SERVER configuration (net.devh:grpc-server-spring-boot-starter)
+#
+# Both OrderService and InventoryService are registered as @GrpcService beans.
+# The net.devh starter registers them all on the SAME Netty server instance.
+# A single gRPC server can host multiple services simultaneously.
+# ---------------------------------------------------------------------------
+grpc:
+  server:
+    # Port for the Netty gRPC server.
+    # Using 9091 (not the default 9090) to make it clear this project uses a
+    # custom port and to avoid conflicts with the grpc-server-integration project.
+    port: 9091
+
+    # Enable gRPC server reflection.
+    # Allows tools like grpcurl and Postman to discover service methods
+    # without a local copy of the .proto file.
+    reflection:
+      enabled: true
+
+  # ---------------------------------------------------------------------------
+  # gRPC CLIENT channel configuration (net.devh:grpc-client-spring-boot-starter)
+  #
+  # Each entry under grpc.client.<name> defines a named gRPC channel.
+  # The <name> corresponds to the value in @GrpcClient("<name>") annotations.
+  #
+  # How it works:
+  #   1. On startup, the starter reads grpc.client.order-service.address.
+  #   2. It creates a ManagedChannel to localhost:9091 (where our gRPC server listens).
+  #   3. When @GrpcClient("order-service") is encountered on a stub field, the starter
+  #      creates a stub from that channel and injects it.
+  #   4. The channel is managed (connection pooled, auto-reconnect) for the app lifetime.
+  #
+  # negotiationType: PLAINTEXT — no TLS for this local demo.
+  #   In production, use TLS with certificates configured here.
+  # ---------------------------------------------------------------------------
+  client:
+
+    # Channel for the OrderService.
+    # @GrpcClient("order-service") in OrderGatewayService uses this channel.
+    order-service:
+      address: static://localhost:9091
+      negotiation-type: plaintext
+
+    # Channel for the InventoryService.
+    # @GrpcClient("inventory-service") in OrderGatewayService uses this channel.
+    # Both services share the same Netty server at port 9091.
+    inventory-service:
+      address: static://localhost:9091
+      negotiation-type: plaintext
+
+# ---------------------------------------------------------------------------
+# Spring Actuator — health and info endpoints
+# ---------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# ---------------------------------------------------------------------------
+# Logging configuration
+# ---------------------------------------------------------------------------
+logging:
+  level:
+    # Log gRPC infrastructure messages at DEBUG for development visibility.
+    net.devh.boot.grpc: DEBUG
+    # Log Hibernate SQL parameter bindings (? → actual values).
+    org.hibernate.type.descriptor.sql: TRACE
+    # Log application-level messages at DEBUG.
+    com.example.grpcclient: DEBUG

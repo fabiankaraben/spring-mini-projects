@@ -1,0 +1,148 @@
+// ============================================================================
+// inventory_service.proto
+//
+// Protocol Buffers (proto3) service definition for the Inventory gRPC service.
+//
+// This file defines the contract between the gRPC server (InventoryGrpcService)
+// and the gRPC clients (@GrpcClient-injected stubs in the REST gateway layer).
+//
+// Code generation:
+//   protobuf-maven-plugin generates:
+//     - InventoryServiceGrpc.java         — gRPC stubs.
+//     - InventoryItem.java, ReserveRequest.java, etc. — protobuf message classes.
+//
+// RPC methods provided:
+//   1. CheckStock    — check available stock for a SKU (unary RPC).
+//   2. ReserveStock  — reserve units for an order (unary RPC).
+//   3. ReleaseStock  — release previously reserved units (unary RPC).
+//   4. ListInventory — stream all inventory items (server-streaming RPC).
+// ============================================================================
+
+syntax = "proto3";
+
+// Java package for generated classes.
+option java_package = "com.example.grpcclient.proto";
+
+// Each message and service gets its own top-level Java class file.
+option java_multiple_files = true;
+
+// Outer wrapper class name.
+option java_outer_classname = "InventoryServiceProto";
+
+// Proto package.
+package inventory;
+
+// ============================================================================
+// Message Definitions
+// ============================================================================
+
+// InventoryItem — represents the stock record for a single SKU.
+message InventoryItem {
+  // Stock Keeping Unit — unique product identifier (e.g., "SKU-LAPTOP-001").
+  string sku = 1;
+
+  // Human-readable product name.
+  string product_name = 2;
+
+  // Total units physically in the warehouse.
+  int32 total_quantity = 3;
+
+  // Units currently reserved for pending/confirmed orders.
+  int32 reserved_quantity = 4;
+
+  // Units available for new orders (total - reserved).
+  int32 available_quantity = 5;
+}
+
+// CheckStockRequest — payload for querying available stock for a SKU.
+message CheckStockRequest {
+  // The SKU to check.
+  string sku = 1;
+}
+
+// CheckStockResponse — result of a stock check.
+message CheckStockResponse {
+  // The SKU that was checked.
+  string sku = 1;
+
+  // Available units (not yet reserved).
+  int32 available_quantity = 2;
+
+  // Whether the requested quantity is available.
+  bool is_available = 3;
+}
+
+// ReserveStockRequest — payload for reserving units for an order.
+message ReserveStockRequest {
+  // The SKU to reserve.
+  string sku = 1;
+
+  // Number of units to reserve.
+  int32 quantity = 2;
+
+  // The order ID this reservation is associated with (for audit/release).
+  string order_id = 3;
+}
+
+// ReserveStockResponse — result of a reservation attempt.
+message ReserveStockResponse {
+  // true if the reservation was successful.
+  bool success = 1;
+
+  // Human-readable explanation (e.g., "Reserved 5 units of SKU-X for order-123").
+  string message = 2;
+
+  // Updated inventory item after reservation.
+  InventoryItem item = 3;
+}
+
+// ReleaseStockRequest — payload for releasing a reservation.
+message ReleaseStockRequest {
+  // The SKU whose reservation should be released.
+  string sku = 1;
+
+  // Number of units to release back to available.
+  int32 quantity = 2;
+
+  // The order ID the reservation was associated with.
+  string order_id = 3;
+}
+
+// ReleaseStockResponse — result of a release operation.
+message ReleaseStockResponse {
+  // true if the release was successful.
+  bool success = 1;
+
+  // Human-readable explanation.
+  string message = 2;
+}
+
+// ListInventoryRequest — payload for streaming all inventory items.
+message ListInventoryRequest {
+  // Optional: if true, only return items with available_quantity > 0.
+  bool only_available = 1;
+}
+
+// ============================================================================
+// Service Definition
+// ============================================================================
+
+// InventoryService — gRPC service for inventory management.
+service InventoryService {
+
+  // CheckStock — check available quantity for a SKU (unary RPC).
+  // Returns NOT_FOUND if the SKU does not exist in the system.
+  rpc CheckStock(CheckStockRequest) returns (CheckStockResponse);
+
+  // ReserveStock — reserve units for an order (unary RPC).
+  // Returns success=false (not an error) if insufficient stock is available.
+  rpc ReserveStock(ReserveStockRequest) returns (ReserveStockResponse);
+
+  // ReleaseStock — release reserved units back to available (unary RPC).
+  // Used when an order is cancelled or payment fails.
+  rpc ReleaseStock(ReleaseStockRequest) returns (ReleaseStockResponse);
+
+  // ListInventory — stream all inventory items (server-streaming RPC).
+  // The onlyAvailable flag filters to items with available stock > 0.
+  rpc ListInventory(ListInventoryRequest) returns (stream InventoryItem);
+}

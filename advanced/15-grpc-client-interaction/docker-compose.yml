@@ -1,0 +1,67 @@
+# =============================================================================
+# Docker Compose for the gRPC Client Interaction mini-project.
+#
+# Runs the complete self-contained application in a single container:
+#   - Spring Boot HTTP server  → port 8080  (REST API + Actuator)
+#   - Netty gRPC server        → port 9091  (OrderService + InventoryService)
+#
+# No external dependencies (database, message broker, etc.) are needed.
+# The application uses an H2 in-memory database seeded on startup.
+#
+# Usage:
+#   docker compose up --build      # build image and start
+#   docker compose up -d           # start in background (detached)
+#   docker compose logs -f app     # tail logs
+#   docker compose down            # stop and remove container
+# =============================================================================
+
+services:
+
+  app:
+    # Build the image from the Dockerfile in the current directory.
+    # The Dockerfile performs a full Maven build including protobuf generation.
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    # Name the container for easy identification in docker ps output.
+    container_name: grpc-client-interaction
+
+    ports:
+      # Map host port 8080 → container port 8080 (REST API + Actuator).
+      # curl http://localhost:8080/api/inventory
+      - "8080:8080"
+
+      # Map host port 9091 → container port 9091 (gRPC Netty server).
+      # grpcurl -plaintext localhost:9091 list
+      - "9091:9091"
+
+    environment:
+      # Override Spring Boot settings via environment variables.
+      # Spring Boot maps SPRING_* env vars to application properties.
+      SPRING_PROFILES_ACTIVE: default
+
+      # JVM memory settings for the container (complement the Dockerfile ENTRYPOINT).
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+
+    # Resource limits — sensible defaults for a demo on a developer machine.
+    # Remove or increase these for production deployments.
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+    # Healthcheck — Docker waits for the Actuator /health endpoint to return 200
+    # before marking the container as healthy.
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider",
+             "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Restart policy — restart the container if it exits unexpectedly.
+    restart: unless-stopped

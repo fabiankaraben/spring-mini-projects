@@ -1,0 +1,51 @@
+# =============================================================================
+# .gitignore for the gRPC Client Interaction mini-project.
+# =============================================================================
+
+# Maven build output
+target/
+
+# Maven Wrapper downloaded files (only commit the .mvn/wrapper directory)
+!.mvn/wrapper/maven-wrapper.jar
+!.mvn/wrapper/maven-wrapper.properties
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse / STS
+.eclipse/
+.classpath
+.project
+.settings/
+bin/
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Spring Boot devtools restart trigger
+.reloadtrigger
+
+# Logs
+*.log
+logs/
+
+# Docker
+.dockerignore

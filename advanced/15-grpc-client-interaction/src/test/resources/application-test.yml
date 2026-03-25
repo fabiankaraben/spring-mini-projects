@@ -1,0 +1,76 @@
+# =============================================================================
+# Test profile configuration for the gRPC Client Interaction mini-project.
+#
+# Activated by @ActiveProfiles("test") in integration test classes.
+# Overrides the default application.yml settings for the test environment.
+#
+# Key differences from the main profile:
+#   1. gRPC server binds to port 19091 (avoids conflict with a running dev instance).
+#   2. gRPC client channels point to localhost:19091 (same test port).
+#   3. H2 uses a separate in-memory database named "testdb" (isolates test data).
+#   4. H2 console disabled (not needed in tests).
+#   5. Logging reduced to WARN to keep test output clean.
+#   6. DataInitializer is excluded via @Profile("!test") — tests seed their own data.
+# =============================================================================
+
+spring:
+  application:
+    name: grpc-client-interaction-test
+
+  # ---------------------------------------------------------------------------
+  # H2 in-memory database — separate named DB for tests.
+  # ---------------------------------------------------------------------------
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      # create-drop: clean schema for every test context.
+      ddl-auto: create-drop
+    # Suppress SQL in test logs — keeps output readable.
+    show-sql: false
+
+  h2:
+    console:
+      enabled: false
+
+# ---------------------------------------------------------------------------
+# HTTP server — random port assigned by @SpringBootTest(RANDOM_PORT).
+# ---------------------------------------------------------------------------
+server:
+  port: 0
+
+# ---------------------------------------------------------------------------
+# gRPC SERVER — use a fixed non-default port to avoid conflicts.
+# 19091 avoids clashing with the default dev gRPC port (9091).
+# ---------------------------------------------------------------------------
+grpc:
+  server:
+    port: 19091
+    reflection:
+      enabled: true
+
+  # ---------------------------------------------------------------------------
+  # gRPC CLIENT channels — point to the test server port.
+  # Both channels connect to the same in-process test server at 19091.
+  # ---------------------------------------------------------------------------
+  client:
+    order-service:
+      address: static://localhost:19091
+      negotiation-type: plaintext
+    inventory-service:
+      address: static://localhost:19091
+      negotiation-type: plaintext
+
+# ---------------------------------------------------------------------------
+# Reduce log noise during test execution.
+# ---------------------------------------------------------------------------
+logging:
+  level:
+    root: WARN
+    com.example.grpcclient: INFO
+    net.devh.boot.grpc: WARN
+    org.hibernate: WARN
