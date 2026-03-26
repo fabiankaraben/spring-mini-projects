@@ -1,0 +1,208 @@
+# ============================================================================
+# Docker Compose file for the Debezium CDC mini-project
+#
+# This file defines a four-service stack:
+#   1. postgres   — PostgreSQL source database (with logical replication enabled)
+#   2. zookeeper  — ZooKeeper coordination service (required by Kafka)
+#   3. kafka      — Apache Kafka message broker (CDC event destination)
+#   4. app        — Spring Boot application with embedded Debezium connector
+#
+# CDC Pipeline (all running inside Docker):
+#   REST Client → app (port 8080)
+#                  │  writes to PostgreSQL
+#                  │
+#                  ▼
+#              PostgreSQL (WAL logical replication)
+#                  │
+#                  ▼
+#         Debezium Embedded Engine (inside app)
+#         reads replication slot, emits SourceRecords
+#                  │
+#                  ▼
+#        KafkaTemplate → Kafka topic: product-cdc-events
+#                  │
+#                  ▼
+#         CdcEventConsumer (in app, logs events)
+#
+# Usage:
+#   docker compose up --build       # Build app image and start all services
+#   docker compose up --build -d    # Same, but in detached (background) mode
+#   docker compose down             # Stop and remove containers
+#   docker compose logs -f          # Follow logs from all services
+#   docker compose logs -f app      # Follow only the Spring Boot app logs
+#
+# Accessing the application after startup:
+#   REST API:         http://localhost:8080/api/products
+#   Actuator health:  http://localhost:8080/actuator/health
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # PostgreSQL — source database for Debezium CDC
+  #
+  # Two critical settings for Debezium:
+  #   wal_level=logical  — enables logical decoding of the WAL, which is what
+  #                        Debezium's pgoutput plugin reads. Without this,
+  #                        Debezium cannot create a replication slot.
+  #
+  #   max_replication_slots=10  — maximum number of active replication slots.
+  #                               Each Debezium connector uses one slot.
+  #
+  #   max_wal_senders=10  — maximum number of processes that can stream WAL.
+  #
+  # The "debezium" user is granted REPLICATION privileges via the init script.
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: debezium-postgres
+    environment:
+      POSTGRES_DB: productdb
+      POSTGRES_USER: debezium
+      POSTGRES_PASSWORD: debezium
+    # Enable logical replication via PostgreSQL command-line flags.
+    # These override the default postgresql.conf settings inside the container.
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=10"
+      - "-c"
+      - "max_wal_senders=10"
+    ports:
+      # Expose PostgreSQL on the standard port for optional external access
+      # (e.g., psql or pgAdmin from the host machine)
+      - "5432:5432"
+    volumes:
+      # Persist PostgreSQL data across container restarts.
+      # Without this volume, all data is lost when the container stops.
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Verify PostgreSQL is accepting connections before dependent services start.
+      test: ["CMD-SHELL", "pg_isready -U debezium -d productdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  # --------------------------------------------------------------------------
+  # ZooKeeper — Kafka coordination service
+  #
+  # Kafka uses ZooKeeper for:
+  #   - Leader election for broker and partition leaders.
+  #   - Storing metadata (topics, partition assignments, consumer offsets).
+  #   - Broker registration and discovery.
+  # --------------------------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: debezium-zookeeper
+    environment:
+      # The port ZooKeeper listens on for client connections from Kafka.
+      ZOOKEEPER_CLIENT_PORT: 2181
+      # Heartbeat interval in milliseconds. Controls how quickly ZooKeeper
+      # detects broker failures. 2000ms is the standard default.
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      # Verify ZooKeeper is responding on its client port before Kafka starts.
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep -q imok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  # --------------------------------------------------------------------------
+  # Kafka — message broker for CDC events
+  #
+  # Receives CDC events published by the Debezium embedded engine via
+  # KafkaTemplate and delivers them to all subscribed consumers.
+  #
+  # Two-listener setup:
+  #   INTERNAL://kafka:29092  — used for container-to-container communication
+  #   EXTERNAL://0.0.0.0:9092 — used for host-to-container communication
+  # --------------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: debezium-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      # Expose Kafka on port 9092 for host-side tools (e.g. kafka-console-consumer)
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # Bind on both internal (container) and external (host) interfaces
+      KAFKA_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://0.0.0.0:9092
+      # Advertise different addresses for container vs host clients
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      # Set to 1 because we have a single broker (not suitable for production)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      # Auto-create the product-cdc-events topic on first use
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # App — Spring Boot application with Debezium embedded
+  #
+  # Built from the multi-stage Dockerfile in this project root.
+  # Connects to PostgreSQL and Kafka using their Docker Compose service names
+  # (Docker Compose creates a bridge network where service names resolve to IPs).
+  #
+  # Environment variables override application.yml defaults:
+  #   DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME — PostgreSQL connection
+  #   KAFKA_BOOTSTRAP_SERVERS — Kafka broker address (uses INTERNAL listener)
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: debezium-cdc-app
+    ports:
+      # Expose port 8080 for REST API access from the host machine
+      - "8080:8080"
+    environment:
+      # PostgreSQL connection — use the Docker service name "postgres" as host.
+      # Docker Compose DNS resolves "postgres" to the PostgreSQL container's IP.
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: debezium
+      DB_PASSWORD: debezium
+      DB_NAME: productdb
+
+      # Kafka connection — use the INTERNAL listener (container-to-container)
+      # The app container connects via "kafka:29092" (Docker Compose DNS)
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+# ============================================================================
+# Named volumes
+# ============================================================================
+volumes:
+  # Persistent storage for PostgreSQL data.
+  # This ensures that product records (and the WAL) survive container restarts.
+  postgres_data:

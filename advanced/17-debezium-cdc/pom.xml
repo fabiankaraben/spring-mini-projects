@@ -1,0 +1,282 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!--
+		Debezium CDC (Change Data Capture) mini-project.
+
+		This project demonstrates how to capture database changes in real-time
+		using Debezium embedded inside a Spring Boot application.
+
+		Architecture:
+		  1. PostgreSQL is the source database. Logical replication (WAL) is enabled
+		     so Debezium can read every INSERT, UPDATE, and DELETE as an event.
+		  2. Debezium Embedded Engine runs inside the Spring Boot process. It polls
+		     the PostgreSQL replication slot and emits SourceRecord objects.
+		  3. A CdcEventDispatcher translates each SourceRecord into a typed
+		     ProductCdcEvent (CREATE / UPDATE / DELETE) and publishes it to Kafka
+		     via KafkaTemplate.
+		  4. A KafkaConsumer bean (in the same application for demo purposes) logs
+		     every received event, simulating a downstream consumer.
+
+		Domain scenario: a product catalogue.
+		  - Clients manage products via a REST API (POST / PUT / DELETE).
+		  - Every database change is automatically captured and streamed to Kafka.
+		  - Downstream systems subscribe to the "product-cdc-events" topic and
+		    react to changes without polling the database.
+
+		Key concepts demonstrated:
+		  - Debezium Embedded Engine (no separate Debezium Connect cluster needed)
+		  - PostgreSQL logical replication with wal_level=logical
+		  - Kafka event schema (envelope with before/after payloads)
+		  - Spring Data JPA for persistence
+		  - Testcontainers for full integration testing
+	-->
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/>
+	</parent>
+
+	<groupId>com.example.debeziumcdc</groupId>
+	<artifactId>debezium-cdc</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>debezium-cdc</name>
+	<description>
+		Spring Boot mini-project demonstrating Debezium CDC (Change Data Capture).
+		Captures PostgreSQL changes (INSERT/UPDATE/DELETE) in real-time using the
+		Debezium Embedded Engine and streams them as events to Apache Kafka.
+		Includes a REST API for product management, JUnit 5 unit tests, and
+		full integration tests with Testcontainers.
+	</description>
+
+	<properties>
+		<java.version>21</java.version>
+		<!--
+			Debezium version.
+			2.7.x is the latest stable series compatible with Debezium Embedded Engine API.
+			The embedded engine API was stable since 1.x and remains backward-compatible.
+		-->
+		<debezium.version>2.7.4.Final</debezium.version>
+		<!-- Testcontainers BOM version — pins all Testcontainers module versions in sync -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+
+	<dependencies>
+
+		<!--
+			Spring Boot Web (Spring MVC + embedded Tomcat):
+			Provides the REST API layer. Clients POST/PUT/DELETE products via
+			/api/products endpoints.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Validation (Bean Validation / Hibernate Validator):
+			Enables @Valid on controller method parameters and @NotBlank,
+			@Positive annotations on request DTOs.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Data JPA:
+			Provides the JPA layer for persisting Product entities to PostgreSQL.
+			Uses Hibernate as the JPA provider and Spring Data repositories.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Actuator:
+			Exposes /actuator/health and /actuator/info endpoints.
+			Used by Docker health checks and monitoring tools.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!--
+			PostgreSQL JDBC Driver:
+			The runtime driver for connecting to PostgreSQL.
+			Spring Boot auto-configures a DataSource using this driver when
+			spring.datasource.url points to a jdbc:postgresql:// URL.
+		-->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
+		<!--
+			Spring Kafka:
+			Provides KafkaTemplate for producing messages to Kafka topics,
+			and @KafkaListener for consuming messages from topics.
+			Used to publish ProductCdcEvent objects captured by Debezium.
+		-->
+		<dependency>
+			<groupId>org.springframework.kafka</groupId>
+			<artifactId>spring-kafka</artifactId>
+		</dependency>
+
+		<!--
+			Debezium Embedded Engine (Core):
+			The Debezium Embedded Engine runs a Debezium connector in-process,
+			without needing a separate Kafka Connect cluster. It reads the
+			PostgreSQL WAL (Write-Ahead Log) via logical replication and emits
+			SourceRecord objects for each database change.
+
+			Why embedded?
+			  - Simpler deployment: no Kafka Connect cluster required.
+			  - Suitable for microservices that want to own their CDC pipeline.
+			  - Trade-off: scaling requires care (only one embedded engine per
+			    replication slot).
+		-->
+		<dependency>
+			<groupId>io.debezium</groupId>
+			<artifactId>debezium-embedded</artifactId>
+			<version>${debezium.version}</version>
+		</dependency>
+
+		<!--
+			Debezium PostgreSQL Connector:
+			The connector that knows how to read PostgreSQL's logical replication
+			stream. It:
+			  1. Creates a replication slot on the PostgreSQL server.
+			  2. Reads WAL records from the slot.
+			  3. Decodes them using the pgoutput plugin (bundled with PostgreSQL 10+).
+			  4. Emits SourceRecord objects with before/after state for each change.
+		-->
+		<dependency>
+			<groupId>io.debezium</groupId>
+			<artifactId>debezium-connector-postgres</artifactId>
+			<version>${debezium.version}</version>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!--
+			Spring Boot Test:
+			Pulls in JUnit 5, AssertJ, Mockito, MockMvc, and all the Spring
+			test infrastructure required for unit and integration tests.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Spring Kafka Test:
+			Provides EmbeddedKafkaBroker and the @EmbeddedKafka annotation.
+			Also provides KafkaTestUtils for consumer-side verification.
+		-->
+		<dependency>
+			<groupId>org.springframework.kafka</groupId>
+			<artifactId>spring-kafka-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers JUnit 5 integration:
+			Provides @Testcontainers (class-level) and @Container (field-level)
+			annotations that manage Docker container lifecycle alongside the
+			JUnit 5 test lifecycle.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers PostgreSQL module:
+			Starts a real PostgreSQL container for integration tests.
+			The container is pre-configured with logical replication enabled,
+			which Debezium requires to read the WAL.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers Kafka module:
+			Starts a real Kafka (Confluent) container for integration tests,
+			so we can verify that CDC events actually arrive in Kafka topics.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>kafka</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+	</dependencies>
+
+	<!--
+		Manage all Testcontainers module versions through the BOM (Bill of Materials).
+		This ensures all testcontainers-* artifacts resolve to a compatible set of
+		versions.
+	-->
+	<dependencyManagement>
+		<dependencies>
+			<!-- Manage all Testcontainers module versions via the BOM so they stay in sync -->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin: packages the application as an executable fat-jar -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+			<!--
+				Maven Surefire Plugin: configures test execution for Java 21+.
+
+				argLine breakdown:
+				  -XX:+EnableDynamicAgentLoading  - silences Mockito/ByteBuddy agent warnings
+				  -Xshare:off                     - disables class-data sharing (avoids conflicts)
+				  -Dnet.bytebuddy.experimental    - required on Java 25+; harmless on Java 21-24
+				  add-opens                       - grants ByteBuddy/Mockito deep reflection access
+
+				DOCKER_API_VERSION=1.44:
+				  Docker Desktop 29+ rejects the legacy v1.24 API path that docker-java uses by
+				  default. Setting 1.44 here (and in docker-java.properties on the test classpath)
+				  ensures Testcontainers works correctly on Docker Desktop 29+.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off -Dnet.bytebuddy.experimental=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<!-- Ensures docker-java uses API v1.44 (Docker Desktop 29+ requires this) -->
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

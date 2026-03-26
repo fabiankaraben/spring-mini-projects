@@ -1,0 +1,121 @@
+# =============================================================================
+# Debezium CDC Application — application.yml
+#
+# This file configures:
+#   1. Spring Boot application identity
+#   2. PostgreSQL DataSource (JPA)
+#   3. Kafka producer/consumer bootstrap servers
+#   4. Debezium connector connection properties
+#   5. Actuator endpoints
+#   6. Logging levels
+#
+# The application reads the PostgreSQL and Kafka addresses from environment
+# variables so the same jar can run locally (using docker-compose.yml) or
+# in any cloud environment without rebuilding.
+# =============================================================================
+
+spring:
+  application:
+    name: debezium-cdc
+
+  # ---------------------------------------------------------------------------
+  # DataSource — PostgreSQL
+  #
+  # Spring Boot auto-configures a HikariCP connection pool using these values.
+  # The database must have:
+  #   - wal_level = logical    (for Debezium replication)
+  #   - The user must have REPLICATION privileges
+  #
+  # Overridden in Docker Compose via SPRING_DATASOURCE_* environment variables.
+  # ---------------------------------------------------------------------------
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:productdb}
+    username: ${DB_USER:debezium}
+    password: ${DB_PASSWORD:debezium}
+    driver-class-name: org.postgresql.Driver
+
+  # ---------------------------------------------------------------------------
+  # JPA / Hibernate
+  #
+  # ddl-auto: update — Hibernate creates/updates the schema on startup.
+  # In production, use 'validate' or 'none' and manage schema with Flyway/Liquibase.
+  #
+  # show-sql: false — SQL logging is verbose; enable for debugging only.
+  # dialect: Hibernate 6 auto-detects the dialect, but we set it explicitly
+  #          to avoid startup warnings.
+  # ---------------------------------------------------------------------------
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        # Timezone: force Hibernate to use UTC for all JDBC timestamps
+        jdbc:
+          time_zone: UTC
+
+  # ---------------------------------------------------------------------------
+  # Kafka bootstrap servers
+  #
+  # Used by KafkaConfig to connect the producer and consumer.
+  # Overridden in Docker Compose via SPRING_KAFKA_BOOTSTRAP_SERVERS.
+  # ---------------------------------------------------------------------------
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+  # ---------------------------------------------------------------------------
+  # Jackson — global JSON serialization settings
+  # ---------------------------------------------------------------------------
+  jackson:
+    # Serialize java.time.Instant as ISO-8601 strings, not epoch milliseconds.
+    serialization:
+      write-dates-as-timestamps: false
+
+# -----------------------------------------------------------------------------
+# Debezium connector properties
+#
+# These are injected into DebeziumConnectorConfig via @Value.
+# The connector needs:
+#   1. A JDBC-capable connection for metadata queries.
+#   2. A replication connection for reading the WAL.
+# Both use the same host/port/user/password but different JDBC URL schemes.
+# -----------------------------------------------------------------------------
+debezium:
+  connector:
+    database:
+      hostname: ${DB_HOST:localhost}
+      port: ${DB_PORT:5432}
+      user: ${DB_USER:debezium}
+      password: ${DB_PASSWORD:debezium}
+      dbname: ${DB_NAME:productdb}
+
+# -----------------------------------------------------------------------------
+# Server
+# -----------------------------------------------------------------------------
+server:
+  port: 8080
+
+# -----------------------------------------------------------------------------
+# Actuator
+# -----------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expose health and info for Docker health checks and monitoring
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+logging:
+  level:
+    com.example.debeziumcdc: DEBUG
+    io.debezium: INFO
+    org.apache.kafka: WARN
+    org.hibernate.SQL: WARN
