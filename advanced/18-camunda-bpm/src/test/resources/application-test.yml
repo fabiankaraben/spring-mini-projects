@@ -1,0 +1,59 @@
+# ============================================================================
+# Test application configuration (active when Spring profile "test" is used).
+#
+# This file overrides application.yml settings for the test environment.
+# It configures the application to use an in-memory H2 database instead of
+# PostgreSQL, which means:
+#   1. No Docker container is needed for unit tests.
+#   2. Tests run faster (no network overhead).
+#   3. H2 is started/stopped automatically by the JVM.
+#
+# The integration tests (OrderFulfilmentIntegrationTest) use a separate
+# @ActiveProfiles("integration-test") and override datasource settings via
+# Testcontainers @DynamicPropertySource, NOT this file.
+# ============================================================================
+
+spring:
+  datasource:
+    # H2 in-memory database URL.
+    # MODE=PostgreSQL: H2 emulates PostgreSQL syntax (needed for Camunda's SQL).
+    # DB_CLOSE_DELAY=-1: keeps the database alive for the duration of the JVM.
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=true;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      # create-drop: Hibernate creates the schema at context startup and drops it
+      # at context shutdown. Suitable for isolated test runs.
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        # H2Dialect is used for unit tests against the H2 in-memory database.
+        dialect: org.hibernate.dialect.H2Dialect
+
+  # Disable Flyway for unit tests — Hibernate's ddl-auto handles schema creation.
+  # Flyway uses PostgreSQL-specific SQL that H2 cannot parse (e.g., TIMESTAMPTZ).
+  flyway:
+    enabled: false
+
+camunda:
+  bpm:
+    # Use the H2 database type so Camunda uses its H2-compatible SQL scripts.
+    database:
+      type: h2
+      schema-update: true
+    # Disable the job executor during tests to prevent background threads from
+    # interfering with test assertions and causing flakiness.
+    job-executor-activate: false
+    # Use a test-specific admin user to avoid conflicts.
+    admin-user:
+      id: admin
+      password: admin
+      first-name: Admin
+
+logging:
+  level:
+    com.example.camundabpm: DEBUG
+    org.camunda: WARN

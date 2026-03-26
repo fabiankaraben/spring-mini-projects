@@ -1,0 +1,131 @@
+# ============================================================================
+# Application configuration for the Camunda BPM mini-project.
+#
+# Environment variables with defaults allow this file to work both:
+#   - Locally (running ./mvnw spring-boot:run) using the defaults
+#   - In Docker Compose, where env vars override the defaults via the
+#     docker-compose.yml environment section.
+#
+# The ${VAR:default} syntax reads the env var VAR; if unset, uses default.
+# ============================================================================
+
+spring:
+  application:
+    name: camunda-bpm
+
+  # --------------------------------------------------------------------------
+  # DataSource configuration
+  # Camunda stores its runtime state (process instances, jobs, variables, tasks)
+  # and history in the same PostgreSQL database as the application's Order table.
+  # --------------------------------------------------------------------------
+  datasource:
+    # jdbc:postgresql://<host>:<port>/<database>
+    # Default values work when running locally with Docker Compose on localhost.
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:camundadb}
+    username: ${DB_USER:camunda}
+    password: ${DB_PASSWORD:camunda}
+    # HikariCP (the default Spring Boot connection pool) settings:
+    driver-class-name: org.postgresql.Driver
+
+  # --------------------------------------------------------------------------
+  # JPA / Hibernate configuration
+  # --------------------------------------------------------------------------
+  jpa:
+    # defer-datasource-initialization: ensures schema.sql / data.sql (if any) run
+    # AFTER Hibernate creates the schema, not before.
+    defer-datasource-initialization: true
+
+    hibernate:
+      # validate: Hibernate checks the schema matches the entities but does NOT modify it.
+      # Camunda manages its own schema via its built-in migration support.
+      # create-drop is used for tests only (via application-test.yml).
+      ddl-auto: validate
+
+    properties:
+      hibernate:
+        # Use PostgreSQL dialect explicitly (Spring Boot can auto-detect but
+        # explicit is better for educational clarity).
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        # Format SQL in logs for readability during development.
+        format_sql: true
+
+    # show-sql: false in production; set to true for local debugging.
+    show-sql: false
+
+  # --------------------------------------------------------------------------
+  # Flyway database migration
+  # Flyway runs migration scripts from src/main/resources/db/migration/ at
+  # startup before the application context is fully initialised.
+  # --------------------------------------------------------------------------
+  flyway:
+    enabled: true
+    # Baseline on migrate allows Flyway to work with existing schemas
+    # (e.g., a fresh PostgreSQL database where Camunda has already created tables).
+    baseline-on-migrate: true
+    baseline-version: 0
+
+# ============================================================================
+# Camunda BPM configuration
+# The camunda.bpm.* prefix is provided by the Camunda Spring Boot Starter.
+# ============================================================================
+camunda:
+  bpm:
+    # admin-user: creates a default admin account in the Camunda identity tables.
+    # Required by the Camunda REST API and Cockpit (if using the webapp).
+    admin-user:
+      id: admin
+      password: admin
+      first-name: Admin
+
+    # auto-deployment-enabled: true (default) — auto-deploys all *.bpmn files
+    # found on the classpath at startup. Our order-fulfilment.bpmn is picked up here.
+    auto-deployment-enabled: true
+
+    # database.type: postgres — tells Camunda to use the PostgreSQL SQL dialect.
+    # Without this, Camunda may fall back to H2 or generic SQL.
+    database:
+      type: postgres
+      # schema-update: true — Camunda creates / updates its own tables on startup.
+      # This is equivalent to running the Camunda SQL migration scripts manually.
+      schema-update: true
+
+    # history-level: full — Camunda stores complete history of all process instances,
+    # activity instances, variable changes, and task history. Useful for auditing.
+    # Other levels: none, activity, audit (less storage, less detail).
+    history-level: full
+
+    # job-executor-activate: false in tests (prevents background threads from interfering).
+    # Set to true in production to enable the Camunda job executor for async/timer tasks.
+    job-executor-activate: true
+
+# ============================================================================
+# Spring Boot Actuator
+# ============================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expose health and info endpoints for Docker health checks and monitoring.
+        include: health,info
+  endpoint:
+    health:
+      # always: shows full health detail (UP/DOWN for each component).
+      show-details: always
+
+# ============================================================================
+# Server configuration
+# ============================================================================
+server:
+  port: 8080
+
+# ============================================================================
+# Logging configuration
+# ============================================================================
+logging:
+  level:
+    # Show INFO-level logs from our application package.
+    com.example.camundabpm: INFO
+    # Reduce Camunda engine noise to WARN in normal operation.
+    org.camunda: WARN
+    # Show Hibernate SQL at DEBUG only if you need to trace queries.
+    org.hibernate.SQL: WARN

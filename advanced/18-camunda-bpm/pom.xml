@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!--
+		Camunda BPM mini-project.
+
+		This project demonstrates how to orchestrate business processes using the
+		Camunda workflow engine embedded inside a Spring Boot application.
+
+		Architecture:
+		  1. A REST API allows clients to submit orders and query their status.
+		  2. When an order is submitted, Camunda starts a BPMN process instance.
+		  3. The process routes the order through several Java service delegates:
+		     a. InventoryCheckDelegate — validates stock availability.
+		     b. PaymentProcessingDelegate — simulates charging the customer.
+		     c. ShippingDelegate — schedules the shipment.
+		     d. NotificationDelegate — sends a confirmation notification.
+		  4. Each step updates the order status stored in a PostgreSQL database.
+		  5. Camunda stores its own runtime state (process instances, tasks, jobs)
+		     in the same PostgreSQL database.
+
+		Domain scenario: an e-commerce order fulfilment pipeline.
+		  - Client POSTs an order to /api/orders.
+		  - The Camunda process drives the order through PENDING → INVENTORY_CHECKED
+		    → PAYMENT_PROCESSED → SHIPPED → COMPLETED (or FAILED on any error).
+		  - Clients can GET /api/orders/{id} to check the current status.
+
+		Key concepts demonstrated:
+		  - Camunda 7 (Community Edition) embedded in Spring Boot
+		  - BPMN 2.0 process definition with service tasks and exclusive gateways
+		  - Java Delegate pattern for service task implementation
+		  - Process variable passing between delegates
+		  - Synchronous process execution with waitForCompletion
+		  - Spring Data JPA for order persistence
+		  - JUnit 5 unit tests for domain logic and delegates
+		  - Testcontainers for full integration tests with a real PostgreSQL database
+	-->
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/>
+	</parent>
+
+	<groupId>com.example.camundabpm</groupId>
+	<artifactId>camunda-bpm</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>camunda-bpm</name>
+	<description>
+		Spring Boot mini-project demonstrating Camunda BPM workflow orchestration.
+		An order fulfilment pipeline is modelled as a BPMN 2.0 process and executed
+		by the Camunda 7 engine. Includes a REST API, JUnit 5 unit tests, and full
+		integration tests with Testcontainers and PostgreSQL.
+	</description>
+
+	<properties>
+		<java.version>21</java.version>
+		<!--
+			Camunda BPM Spring Boot Starter version.
+			7.22.0 is the latest Camunda 7 Community Edition release that ships a
+			Spring Boot 3.x compatible starter. Camunda 7 is the last open-source
+			(Apache 2.0) release line; Camunda 8 moved to a different architecture.
+		-->
+		<camunda.version>7.22.0</camunda.version>
+		<!-- Testcontainers BOM version — pins all module versions in sync -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+
+	<!--
+		Import the Camunda BOM (Bill of Materials) to manage all Camunda artifact
+		versions centrally. This avoids version conflicts between camunda-engine,
+		camunda-spring-boot-starter, camunda-spin, etc.
+	-->
+	<dependencyManagement>
+		<dependencies>
+			<!-- Camunda BOM — manages all org.camunda.bpm.* versions -->
+			<dependency>
+				<groupId>org.camunda.bpm</groupId>
+				<artifactId>camunda-bom</artifactId>
+				<version>${camunda.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<!-- Testcontainers BOM — manages all testcontainers-* versions -->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<dependencies>
+
+		<!--
+			Spring Boot Web (Spring MVC + embedded Tomcat):
+			Provides the REST API layer. Clients submit orders and query status
+			via /api/orders endpoints.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Validation (Bean Validation / Hibernate Validator):
+			Enables @Valid on controller parameters and @NotBlank, @Positive, etc.
+			on request DTOs.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Data JPA:
+			Provides the JPA layer for persisting Order entities to PostgreSQL.
+			Uses Hibernate as the JPA provider and Spring Data repositories.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Actuator:
+			Exposes /actuator/health and /actuator/info endpoints.
+			Used by Docker health checks and for operational monitoring.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!--
+			Camunda Spring Boot Starter:
+			Auto-configures the Camunda 7 process engine and wires it into the
+			Spring application context. It registers the ProcessEngine, RuntimeService,
+			TaskService, HistoryService, and other Camunda services as Spring beans.
+
+			It also auto-deploys all BPMN/DMN/CMMN files found on the classpath
+			under src/main/resources/*.bpmn (configurable).
+		-->
+		<dependency>
+			<groupId>org.camunda.bpm.springboot</groupId>
+			<artifactId>camunda-bpm-spring-boot-starter</artifactId>
+		</dependency>
+
+		<!--
+			Camunda Spin (JSON/XML processing):
+			Provides camunda-spin-dataformat-json-jackson for reading and writing
+			JSON process variables. Required by the Camunda REST API layer when
+			serialising complex process variable types.
+		-->
+		<dependency>
+			<groupId>org.camunda.spin</groupId>
+			<artifactId>camunda-spin-dataformat-json-jackson</artifactId>
+		</dependency>
+
+		<!--
+			Camunda Spin Spring Boot integration:
+			Registers the Spin JSON data format with the process engine automatically
+			so that complex Java objects stored as process variables are serialised
+			to JSON and deserialised back transparently.
+		-->
+		<dependency>
+			<groupId>org.camunda.bpm</groupId>
+			<artifactId>camunda-engine-plugin-spin</artifactId>
+		</dependency>
+
+		<!--
+			PostgreSQL JDBC Driver:
+			Runtime driver for connecting to PostgreSQL. Spring Boot auto-configures
+			the DataSource when spring.datasource.url points to a jdbc:postgresql:// URL.
+			Camunda also uses this DataSource to persist process state.
+		-->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!--
+			Spring Boot Test:
+			Pulls in JUnit 5, AssertJ, Mockito, MockMvc, and all the Spring test
+			infrastructure required for unit and integration tests.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers JUnit 5 integration:
+			Provides @Testcontainers (class-level) and @Container (field-level)
+			annotations that tie container lifecycle to the JUnit 5 test lifecycle.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers PostgreSQL module:
+			Spins up a real PostgreSQL container for integration tests so that
+			Camunda and JPA both operate against a real database (not H2).
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			H2 in-memory database:
+			Used for lightweight unit tests that need a database but do NOT
+			require the full Testcontainers infrastructure. Camunda supports H2
+			natively, so it can auto-create its schema on H2 without extra config.
+		-->
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+	</dependencies>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin: packages the application as an executable fat-jar -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+			<!--
+				Maven Surefire Plugin: configures test execution for Java 21+.
+
+				argLine breakdown:
+				  -XX:+EnableDynamicAgentLoading  - silences Mockito/ByteBuddy agent warnings
+				  -Xshare:off                     - disables class-data sharing (avoids conflicts)
+				  -Dnet.bytebuddy.experimental    - required on Java 25+; harmless on Java 21-24
+				  add-opens                       - grants ByteBuddy/Mockito deep reflection access
+
+				DOCKER_API_VERSION=1.44:
+				  Docker Desktop 29+ rejects the legacy v1.24 API path that docker-java uses by
+				  default. Setting 1.44 here (and in docker-java.properties on the test classpath)
+				  ensures Testcontainers works correctly on Docker Desktop 29+.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off -Dnet.bytebuddy.experimental=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<!-- Ensures docker-java uses API v1.44 (Docker Desktop 29+ requires this) -->
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

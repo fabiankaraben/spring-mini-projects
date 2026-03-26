@@ -1,0 +1,51 @@
+# ============================================================================
+# Integration test configuration (profile: integration-test).
+#
+# Used by OrderFulfilmentIntegrationTest with @ActiveProfiles("integration-test").
+#
+# The actual datasource URL/username/password are overridden at runtime by
+# @DynamicPropertySource in the test class, which injects the Testcontainers
+# PostgreSQL connection details BEFORE the Spring context is created.
+#
+# This file only needs to:
+#   1. Disable Flyway (Camunda + Hibernate manage the schema in tests).
+#   2. Set the correct Camunda database type (postgres).
+#   3. Allow Hibernate to create/update the schema on the real PostgreSQL.
+#   4. Disable the Camunda job executor to avoid async interference.
+# ============================================================================
+
+spring:
+  jpa:
+    hibernate:
+      # update: Hibernate creates missing tables and columns but does NOT drop
+      # existing ones. This is safe for integration tests where the container
+      # starts fresh each time.
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # Disable Flyway for integration tests — Camunda and Hibernate manage the schema.
+  # Flyway would conflict with Camunda's own schema-update mechanism.
+  flyway:
+    enabled: false
+
+camunda:
+  bpm:
+    database:
+      type: postgres
+      # schema-update: true — Camunda creates its own tables (ACT_*) on the
+      # fresh PostgreSQL Testcontainers instance at startup.
+      schema-update: true
+    job-executor-activate: false
+    admin-user:
+      id: admin
+      password: admin
+      first-name: Admin
+    history-level: full
+
+logging:
+  level:
+    com.example.camundabpm: DEBUG
+    org.camunda: WARN
+    org.testcontainers: INFO

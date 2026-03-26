@@ -1,0 +1,368 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  BPMN 2.0 process definition for the Order Fulfilment workflow.
+
+  This file is auto-deployed by the Camunda Spring Boot Starter at application
+  startup. Camunda scans the classpath for *.bpmn files and creates a process
+  definition in the ACT_RE_PROCDEF table.
+
+  Process key: "order-fulfilment"
+  This key is referenced in OrderService.startProcessInstanceByKey("order-fulfilment").
+
+  Happy path flow:
+    Start → Check Inventory → [Inventory Available?]
+      YES → Process Payment → [Payment Successful?]
+        YES → Schedule Shipment → Send Notification → End (fulfilled)
+        NO  → End (failed)
+      NO  → End (failed)
+
+  Each service task references a Spring bean by name using:
+    camunda:delegateExpression="${beanName}"
+  This tells Camunda to look up the named bean in the Spring context and call
+  its execute(DelegateExecution) method.
+
+  Exclusive gateways (diamond shapes with X) evaluate conditions at runtime.
+  The condition expression uses the process variable set by each delegate
+  (e.g., ${inventoryAvailable == true}).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             targetNamespace="http://www.example.com/camundabpm"
+             xsi:schemaLocation="http://www.omg.org/spec/BPMN/20100524/MODEL
+               http://www.omg.org/spec/BPMN/20100524/MODEL/BPMN20.xsd">
+
+  <!--
+    Process definition.
+    id="order-fulfilment" — the process key used in startProcessInstanceByKey().
+    isExecutable="true"   — required for the engine to run this process.
+    name                  — human-readable name shown in Camunda Cockpit.
+  -->
+  <!--
+    camunda:historyTimeToLive="P30D": required by Camunda 7.22+ (ENGINE-12018).
+    Specifies how long completed process instance history is retained before
+    the History Cleanup job can delete it. ISO 8601 duration: P30D = 30 days.
+    Without this, the engine refuses to deploy the process definition.
+  -->
+  <process id="order-fulfilment"
+           name="Order Fulfilment"
+           isExecutable="true"
+           camunda:historyTimeToLive="P30D">
+
+    <!-- ================================================================
+         Start Event — triggered when OrderService calls
+         runtimeService.startProcessInstanceByKey("order-fulfilment", vars).
+         The orderId variable is available from this point onward.
+         ================================================================ -->
+    <startEvent id="start" name="Order Received">
+      <outgoing>flow-start-to-inventory</outgoing>
+    </startEvent>
+
+    <!-- ================================================================
+         Service Task 1: Check Inventory
+         Camunda calls InventoryCheckDelegate.execute(execution).
+         Sets process variable: inventoryAvailable = true/false
+         ================================================================ -->
+    <serviceTask id="task-check-inventory"
+                 name="Check Inventory"
+                 camunda:delegateExpression="${inventoryCheckDelegate}">
+      <incoming>flow-start-to-inventory</incoming>
+      <outgoing>flow-inventory-to-gw</outgoing>
+    </serviceTask>
+
+    <!-- ================================================================
+         Exclusive Gateway: Inventory Available?
+         Evaluates the inventoryAvailable process variable.
+         Routes to payment on true, or to failed end on false.
+         ================================================================ -->
+    <exclusiveGateway id="gw-inventory" name="Inventory Available?">
+      <incoming>flow-inventory-to-gw</incoming>
+      <outgoing>flow-gw-inventory-yes</outgoing>
+      <outgoing>flow-gw-inventory-no</outgoing>
+    </exclusiveGateway>
+
+    <!-- ================================================================
+         Service Task 2: Process Payment
+         Camunda calls PaymentProcessingDelegate.execute(execution).
+         Computes total = quantity × unitPrice.
+         Sets process variable: paymentSuccess = true/false
+         ================================================================ -->
+    <serviceTask id="task-process-payment"
+                 name="Process Payment"
+                 camunda:delegateExpression="${paymentProcessingDelegate}">
+      <incoming>flow-gw-inventory-yes</incoming>
+      <outgoing>flow-payment-to-gw</outgoing>
+    </serviceTask>
+
+    <!-- ================================================================
+         Exclusive Gateway: Payment Successful?
+         Evaluates the paymentSuccess process variable.
+         Routes to shipping on true, or to failed end on false.
+         ================================================================ -->
+    <exclusiveGateway id="gw-payment" name="Payment Successful?">
+      <incoming>flow-payment-to-gw</incoming>
+      <outgoing>flow-gw-payment-yes</outgoing>
+      <outgoing>flow-gw-payment-no</outgoing>
+    </exclusiveGateway>
+
+    <!-- ================================================================
+         Service Task 3: Schedule Shipment
+         Camunda calls ShippingDelegate.execute(execution).
+         Generates a tracking number and sets order status to SHIPPED.
+         Sets process variable: trackingNumber = "TRK-..."
+         ================================================================ -->
+    <serviceTask id="task-schedule-shipment"
+                 name="Schedule Shipment"
+                 camunda:delegateExpression="${shippingDelegate}">
+      <incoming>flow-gw-payment-yes</incoming>
+      <outgoing>flow-shipment-to-notification</outgoing>
+    </serviceTask>
+
+    <!-- ================================================================
+         Service Task 4: Send Notification
+         Camunda calls NotificationDelegate.execute(execution).
+         Simulates sending a confirmation email/SMS to the customer.
+         Sets order status to COMPLETED.
+         ================================================================ -->
+    <serviceTask id="task-send-notification"
+                 name="Send Notification"
+                 camunda:delegateExpression="${notificationDelegate}">
+      <incoming>flow-shipment-to-notification</incoming>
+      <outgoing>flow-notification-to-end</outgoing>
+    </serviceTask>
+
+    <!-- ================================================================
+         End Event (happy path): Order Fulfilled
+         Reached when all four service tasks complete successfully.
+         At this point, the order status is COMPLETED.
+         ================================================================ -->
+    <endEvent id="end-fulfilled" name="Order Fulfilled">
+      <incoming>flow-notification-to-end</incoming>
+    </endEvent>
+
+    <!-- ================================================================
+         End Event (failure path): Order Failed
+         Reached when inventory is unavailable OR payment fails.
+         At this point, the order status is FAILED.
+         Both failure gateways converge here.
+         ================================================================ -->
+    <endEvent id="end-failed" name="Order Failed">
+      <incoming>flow-gw-inventory-no</incoming>
+      <incoming>flow-gw-payment-no</incoming>
+    </endEvent>
+
+    <!-- ================================================================
+         Sequence Flows — connect the BPMN elements defined above.
+         Each flow has an id, sourceRef, and targetRef.
+         Conditional flows also have a conditionExpression.
+         ================================================================ -->
+
+    <!-- Start → Check Inventory (unconditional) -->
+    <sequenceFlow id="flow-start-to-inventory"
+                  sourceRef="start"
+                  targetRef="task-check-inventory"/>
+
+    <!-- Check Inventory → Inventory Gateway (unconditional) -->
+    <sequenceFlow id="flow-inventory-to-gw"
+                  sourceRef="task-check-inventory"
+                  targetRef="gw-inventory"/>
+
+    <!-- Inventory Gateway → Process Payment (when inventory available) -->
+    <sequenceFlow id="flow-gw-inventory-yes"
+                  name="Yes"
+                  sourceRef="gw-inventory"
+                  targetRef="task-process-payment">
+      <!--
+        Condition expression: evaluated by Camunda when the token reaches the gateway.
+        ${inventoryAvailable == true} reads the process variable set by InventoryCheckDelegate.
+        UEL (Unified Expression Language) syntax is used for conditions in Camunda 7.
+      -->
+      <conditionExpression xsi:type="tFormalExpression">
+        ${inventoryAvailable == true}
+      </conditionExpression>
+    </sequenceFlow>
+
+    <!-- Inventory Gateway → Order Failed (when inventory not available) -->
+    <sequenceFlow id="flow-gw-inventory-no"
+                  name="No"
+                  sourceRef="gw-inventory"
+                  targetRef="end-failed">
+      <conditionExpression xsi:type="tFormalExpression">
+        ${inventoryAvailable == false}
+      </conditionExpression>
+    </sequenceFlow>
+
+    <!-- Process Payment → Payment Gateway (unconditional) -->
+    <sequenceFlow id="flow-payment-to-gw"
+                  sourceRef="task-process-payment"
+                  targetRef="gw-payment"/>
+
+    <!-- Payment Gateway → Schedule Shipment (when payment succeeded) -->
+    <sequenceFlow id="flow-gw-payment-yes"
+                  name="Yes"
+                  sourceRef="gw-payment"
+                  targetRef="task-schedule-shipment">
+      <conditionExpression xsi:type="tFormalExpression">
+        ${paymentSuccess == true}
+      </conditionExpression>
+    </sequenceFlow>
+
+    <!-- Payment Gateway → Order Failed (when payment failed) -->
+    <sequenceFlow id="flow-gw-payment-no"
+                  name="No"
+                  sourceRef="gw-payment"
+                  targetRef="end-failed">
+      <conditionExpression xsi:type="tFormalExpression">
+        ${paymentSuccess == false}
+      </conditionExpression>
+    </sequenceFlow>
+
+    <!-- Schedule Shipment → Send Notification (unconditional) -->
+    <sequenceFlow id="flow-shipment-to-notification"
+                  sourceRef="task-schedule-shipment"
+                  targetRef="task-send-notification"/>
+
+    <!-- Send Notification → Order Fulfilled (unconditional) -->
+    <sequenceFlow id="flow-notification-to-end"
+                  sourceRef="task-send-notification"
+                  targetRef="end-fulfilled"/>
+
+  </process>
+
+  <!--
+    BPMN Diagram Interchange (DI) section.
+    This section contains the visual layout information used by BPMN modellers
+    (Camunda Modeler, Signavio, etc.) to render the diagram. It does not affect
+    process execution — the engine ignores it at runtime.
+
+    Shapes (BPMNShape): position and size of each element.
+    Edges  (BPMNEdge):  waypoints of each sequence flow arrow.
+  -->
+  <bpmndi:BPMNDiagram xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="order-fulfilment">
+
+      <!-- Start event shape -->
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="152" y="82" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="128" y="125" width="86" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- Check Inventory task shape -->
+      <bpmndi:BPMNShape id="task-check-inventory_di" bpmnElement="task-check-inventory">
+        <dc:Bounds x="240" y="60" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Inventory gateway shape -->
+      <bpmndi:BPMNShape id="gw-inventory_di" bpmnElement="gw-inventory" isMarkerVisible="true">
+        <dc:Bounds x="395" y="75" width="50" height="50"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="374" y="132" width="93" height="27"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- Process Payment task shape -->
+      <bpmndi:BPMNShape id="task-process-payment_di" bpmnElement="task-process-payment">
+        <dc:Bounds x="500" y="60" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Payment gateway shape -->
+      <bpmndi:BPMNShape id="gw-payment_di" bpmnElement="gw-payment" isMarkerVisible="true">
+        <dc:Bounds x="655" y="75" width="50" height="50"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="632" y="132" width="97" height="27"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- Schedule Shipment task shape -->
+      <bpmndi:BPMNShape id="task-schedule-shipment_di" bpmnElement="task-schedule-shipment">
+        <dc:Bounds x="760" y="60" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Send Notification task shape -->
+      <bpmndi:BPMNShape id="task-send-notification_di" bpmnElement="task-send-notification">
+        <dc:Bounds x="920" y="60" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <!-- End event (fulfilled) shape -->
+      <bpmndi:BPMNShape id="end-fulfilled_di" bpmnElement="end-fulfilled">
+        <dc:Bounds x="1082" y="82" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1056" y="125" width="89" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- End event (failed) shape -->
+      <bpmndi:BPMNShape id="end-failed_di" bpmnElement="end-failed">
+        <dc:Bounds x="412" y="222" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="396" y="265" width="69" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <!-- Sequence flow edges -->
+      <bpmndi:BPMNEdge id="flow-start-to-inventory_di" bpmnElement="flow-start-to-inventory">
+        <di:waypoint x="188" y="100"/>
+        <di:waypoint x="240" y="100"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow-inventory-to-gw_di" bpmnElement="flow-inventory-to-gw">
+        <di:waypoint x="340" y="100"/>
+        <di:waypoint x="395" y="100"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow-gw-inventory-yes_di" bpmnElement="flow-gw-inventory-yes">
+        <di:waypoint x="445" y="100"/>
+        <di:waypoint x="500" y="100"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="464" y="82" width="18" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow-gw-inventory-no_di" bpmnElement="flow-gw-inventory-no">
+        <di:waypoint x="420" y="125"/>
+        <di:waypoint x="420" y="222"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="426" y="170" width="15" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow-payment-to-gw_di" bpmnElement="flow-payment-to-gw">
+        <di:waypoint x="600" y="100"/>
+        <di:waypoint x="655" y="100"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow-gw-payment-yes_di" bpmnElement="flow-gw-payment-yes">
+        <di:waypoint x="705" y="100"/>
+        <di:waypoint x="760" y="100"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="724" y="82" width="18" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow-gw-payment-no_di" bpmnElement="flow-gw-payment-no">
+        <di:waypoint x="680" y="125"/>
+        <di:waypoint x="680" y="240"/>
+        <di:waypoint x="448" y="240"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="686" y="170" width="15" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow-shipment-to-notification_di" bpmnElement="flow-shipment-to-notification">
+        <di:waypoint x="860" y="100"/>
+        <di:waypoint x="920" y="100"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow-notification-to-end_di" bpmnElement="flow-notification-to-end">
+        <di:waypoint x="1020" y="100"/>
+        <di:waypoint x="1082" y="100"/>
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</definitions>

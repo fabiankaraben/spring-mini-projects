@@ -1,0 +1,132 @@
+# ============================================================================
+# Docker Compose file for the Camunda BPM mini-project
+#
+# This file defines a two-service stack:
+#   1. postgres  — PostgreSQL database (stores both orders and Camunda state)
+#   2. app       — Spring Boot application with embedded Camunda engine
+#
+# Architecture (all running inside Docker):
+#   REST Client → app (port 8080)
+#                  │  starts Camunda process
+#                  │
+#                  ▼
+#         Camunda Process Engine (embedded in app)
+#         executes service tasks in sequence:
+#           InventoryCheckDelegate
+#           PaymentProcessingDelegate
+#           ShippingDelegate
+#           NotificationDelegate
+#                  │
+#                  ▼
+#              PostgreSQL (port 5432)
+#         stores: orders table + Camunda ACT_* tables
+#
+# Usage:
+#   docker compose up --build       # Build app image and start all services
+#   docker compose up --build -d    # Same, but in detached (background) mode
+#   docker compose down             # Stop and remove containers
+#   docker compose logs -f          # Follow logs from all services
+#   docker compose logs -f app      # Follow only the Spring Boot app logs
+#
+# Accessing the application after startup:
+#   REST API:             http://localhost:8080/api/orders
+#   Actuator health:      http://localhost:8080/actuator/health
+#   Camunda REST API:     http://localhost:8080/engine-rest/process-definition
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # PostgreSQL — the application database
+  #
+  # Stores both:
+  #   1. The business data: the "orders" table (created by Flyway migration V1).
+  #   2. The Camunda runtime state: ACT_RU_*, ACT_HI_*, ACT_RE_* tables
+  #      (created by Camunda's built-in schema-update on startup).
+  #
+  # Using a single database for both simplifies the deployment and demonstrates
+  # how Camunda integrates naturally with an existing application database.
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: camunda-bpm-postgres
+    environment:
+      # Database name, user, and password — must match the values in
+      # application.yml (or the env vars passed to the app service below).
+      POSTGRES_DB: camundadb
+      POSTGRES_USER: camunda
+      POSTGRES_PASSWORD: camunda
+    ports:
+      # Expose PostgreSQL on the standard port for optional external access
+      # (e.g., psql or a database GUI from the host machine).
+      - "5432:5432"
+    volumes:
+      # Persist PostgreSQL data across container restarts.
+      # Without this volume, all orders and process history are lost when
+      # the container stops.
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Verify PostgreSQL is accepting connections before the app starts.
+      # pg_isready checks that the server is listening and accepting connections.
+      test: ["CMD-SHELL", "pg_isready -U camunda -d camundadb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  # --------------------------------------------------------------------------
+  # App — Spring Boot application with embedded Camunda engine
+  #
+  # Built from the multi-stage Dockerfile in this project root.
+  # Connects to PostgreSQL using the Docker Compose service name "postgres"
+  # (Docker Compose creates a bridge network where service names resolve to IPs).
+  #
+  # Environment variables override the defaults in application.yml:
+  #   DB_HOST     — points to the "postgres" service (Docker Compose DNS)
+  #   DB_PORT     — standard PostgreSQL port
+  #   DB_USER     — matches POSTGRES_USER above
+  #   DB_PASSWORD — matches POSTGRES_PASSWORD above
+  #   DB_NAME     — matches POSTGRES_DB above
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: camunda-bpm-app
+    ports:
+      # Expose port 8080 for REST API access from the host machine
+      - "8080:8080"
+    environment:
+      # PostgreSQL connection — use Docker Compose service name as host.
+      # Docker Compose's internal DNS resolves "postgres" to the container's IP.
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: camunda
+      DB_PASSWORD: camunda
+      DB_NAME: camundadb
+    depends_on:
+      postgres:
+        # Wait for PostgreSQL to be healthy before starting the app.
+        # Without this, the app may start before the database is ready and fail.
+        condition: service_healthy
+    healthcheck:
+      # Check the Spring Boot Actuator health endpoint.
+      # The app is healthy when it responds with {"status":"UP"}.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # start_period gives the app time to start up (download dependencies,
+      # initialise Camunda, run Flyway migrations) before health checks begin.
+      start_period: 90s
+
+# ============================================================================
+# Named volumes
+# ============================================================================
+volumes:
+  # Persistent storage for PostgreSQL data.
+  # This ensures that orders and Camunda process history survive container restarts.
+  postgres_data:
