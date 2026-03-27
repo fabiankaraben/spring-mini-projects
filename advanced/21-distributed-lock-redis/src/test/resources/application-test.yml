@@ -1,0 +1,24 @@
+# ============================================================================
+# Test application configuration
+#
+# This file is loaded when the "test" Spring profile is active.
+# Integration tests use Testcontainers to start a real Redis instance and
+# override the connection settings via @DynamicPropertySource in the test class.
+# ============================================================================
+
+# Simulated task processing time during tests — set very low to keep tests fast.
+# Integration tests override this via @DynamicPropertySource when needed.
+app:
+  lock:
+    timeout-seconds: 2
+    lease-seconds: 10
+  task:
+    processing-ms: 100
+
+# Reduce logging noise during tests
+logging:
+  level:
+    com.example.distributedlock: DEBUG
+    org.testcontainers: INFO
+    com.github.dockerjava: WARN
+    org.redisson: WARN

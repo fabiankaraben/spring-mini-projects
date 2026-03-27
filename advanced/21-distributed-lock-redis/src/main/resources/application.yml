@@ -1,0 +1,70 @@
+# ============================================================================
+# Application configuration for the Distributed Lock Redis mini-project
+#
+# This file configures:
+#   - The HTTP server port
+#   - Redisson (Redis client) connection settings
+#   - Spring Boot Actuator endpoints
+#   - Application-level task processing settings
+#   - Logging levels
+# ============================================================================
+
+server:
+  port: 8080
+
+spring:
+  # --------------------------------------------------------------------------
+  # Redisson auto-configuration
+  #
+  # Spring Boot's Redisson starter reads "spring.data.redis.*" properties and
+  # creates a RedissonClient bean automatically. When running in Docker Compose
+  # the host "redis" resolves to the Redis container via Docker's internal DNS.
+  # --------------------------------------------------------------------------
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+# --------------------------------------------------------------------------
+# Spring Boot Actuator
+#
+# Exposes the /actuator/health endpoint, which Docker Compose uses for
+# its healthcheck probe to determine when the app is ready.
+# --------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# --------------------------------------------------------------------------
+# Application-level task processing settings
+#
+# These values control distributed lock behaviour:
+#   lock-timeout-seconds:  How long a thread waits to acquire the lock before
+#                          giving up (fail-fast behaviour).
+#   lock-lease-seconds:    Maximum time the lock is held. After this the lock
+#                          is automatically released even if the holder crashed,
+#                          preventing dead-locks. Set to -1 to use Redisson's
+#                          watch-dog (auto-renew) mode instead.
+#   task-processing-ms:    Simulated task processing duration (milliseconds).
+#                          This artificial delay makes concurrent lock contention
+#                          visible and easy to demonstrate with curl.
+# --------------------------------------------------------------------------
+app:
+  lock:
+    timeout-seconds: 5
+    lease-seconds: 30
+  task:
+    processing-ms: 2000
+
+# --------------------------------------------------------------------------
+# Logging
+# --------------------------------------------------------------------------
+logging:
+  level:
+    com.example.distributedlock: DEBUG
+    org.redisson: WARN

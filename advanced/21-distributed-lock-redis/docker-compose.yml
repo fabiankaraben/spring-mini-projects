@@ -1,0 +1,128 @@
+# ============================================================================
+# Docker Compose file for the Distributed Lock Redis mini-project
+#
+# This file defines a two-service stack:
+#   1. redis  — The Redis server that backs the distributed lock.
+#               Redisson uses Redis as a coordination point: any node in the
+#               cluster that acquires the lock sets a Redis key with a TTL;
+#               all other nodes see that key and wait or fail-fast.
+#   2. app    — The Spring Boot backend. Exposes a Task API whose endpoints
+#               acquire a Redis-backed distributed lock before processing.
+#
+# How the distributed lock works end-to-end:
+#   - A POST /api/tasks request arrives at the app.
+#   - TaskService calls redissonClient.getLock("task-lock:<taskKey>").
+#   - Redisson executes: SET task-lock:<key> <uuid> NX PX <leaseMs>
+#     (set the key only if Not eXists, with a millisecond expiry).
+#   - If SET succeeds → this app instance holds the lock → task runs.
+#   - If SET fails    → another instance holds it → SKIPPED (409 Conflict).
+#   - On completion   → Redisson Lua script deletes the key (only owner can).
+#   - If the holder crashes → Redis auto-expires the key after leaseSeconds.
+#
+# Port mapping:
+#   - Redis: host 6379 → container 6379
+#   - App:   host 8080 → container 8080
+#
+# Usage:
+#   docker compose up --build          # Build the app image and start both services
+#   docker compose up --build -d       # Same, in detached (background) mode
+#   docker compose down                # Stop and remove containers
+#   docker compose down -v             # Stop containers AND remove the data volume
+#   docker compose logs -f             # Follow logs from all services
+#   docker compose logs -f app         # Follow app logs only
+#   docker compose logs -f redis       # Follow Redis logs only
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Redis — distributed lock backend
+  #
+  # Redis is used as a single coordination point for the distributed lock.
+  # Redisson stores lock state as Redis keys with an automatic expiry (TTL),
+  # which prevents dead-locks if a lock holder crashes.
+  #
+  # Key configuration choices:
+  #   image: redis:7-alpine — small, official, multi-arch image (AMD64 + ARM64).
+  #   --save 60 1           — persist data to disk every 60 s if ≥1 key changed.
+  #   --loglevel notice     — suppress verbose DEBUG output in docker logs.
+  #
+  # Health check:
+  #   Uses redis-cli PING which returns "PONG" when Redis is ready.
+  #   The Spring Boot app depends_on this health check passing before starting.
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: distributed-lock-redis
+    ports:
+      # Expose Redis on the standard port for local inspection (e.g., redis-cli)
+      - "6379:6379"
+    volumes:
+      # Named volume so Redis data survives container restarts
+      - redis-data:/data
+    command: redis-server --save 60 1 --loglevel notice
+    healthcheck:
+      # redis-cli PING returns "PONG" when the server is ready to accept commands
+      test: ["CMD", "redis-cli", "PING"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # Spring Boot Application (Distributed Lock Redis backend)
+  #
+  # Built from the Dockerfile in this project root.
+  # Starts only after Redis is healthy so that the Redisson client can
+  # successfully connect when the application context initialises.
+  #
+  # Key environment variables:
+  #   REDIS_HOST:  "redis" resolves to the redis container via Docker's
+  #                internal DNS. The app's application.yml reads this variable.
+  #   REDIS_PORT:  Standard Redis port inside the Docker network.
+  #
+  #   APP_LOCK_TIMEOUT_SECONDS:  How long a request waits for the lock.
+  #   APP_LOCK_LEASE_SECONDS:    Lock TTL — auto-released after this if holder crashes.
+  #   APP_TASK_PROCESSING_MS:    Simulated task duration (makes contention visible).
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: distributed-lock-app
+    ports:
+      - "8080:8080"
+    environment:
+      # Redis connection — "redis" resolves via Docker Compose internal DNS
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # Distributed lock tuning
+      APP_LOCK_TIMEOUT-SECONDS: 5
+      APP_LOCK_LEASE-SECONDS: 30
+
+      # Simulated processing time — increase this to make lock contention more visible
+      APP_TASK_PROCESSING-MS: 3000
+
+      JAVA_OPTS: "-Xms128m -Xmx256m"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+# ----------------------------------------------------------------------------
+# Named volumes
+#
+# redis-data: Stores Redis RDB snapshots on the Docker host.
+#   Survives `docker compose down` but is removed by `docker compose down -v`.
+# ----------------------------------------------------------------------------
+volumes:
+  redis-data:
