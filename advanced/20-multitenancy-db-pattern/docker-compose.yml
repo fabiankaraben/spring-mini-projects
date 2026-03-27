@@ -1,0 +1,132 @@
+# ============================================================================
+# Docker Compose file for the Multi-Tenancy DB Pattern mini-project
+#
+# This file defines a two-service stack:
+#   1. postgres  — The PostgreSQL database server. All tenant schemas live
+#                  in the same database (multitenancy_db). Each tenant gets
+#                  its own PostgreSQL schema (tenant_alpha, tenant_beta).
+#   2. app       — The Spring Boot backend. Reads the X-Tenant-ID header
+#                  and routes every DB connection to the correct schema via
+#                  Hibernate's MultiTenantConnectionProvider.
+#
+# How the schema-per-tenant strategy works:
+#   - A single shared PostgreSQL database contains multiple schemas.
+#   - On startup, TenantSchemaInitializer creates one schema per tenant.
+#   - Each HTTP request carries an X-Tenant-ID header.
+#   - TenantInterceptor reads the header and sets TenantContext (thread-local).
+#   - TenantConnectionProvider executes SET search_path TO <schema>, public
+#     before handing a connection to Hibernate, isolating each tenant's data.
+#
+# Port mapping:
+#   - PostgreSQL: host 5432 → container 5432
+#   - App:        host 8080 → container 8080
+#
+# Usage:
+#   docker compose up --build          # Build the app image and start both services
+#   docker compose up --build -d       # Same, in detached (background) mode
+#   docker compose down                # Stop and remove containers
+#   docker compose down -v             # Stop containers AND remove the data volume
+#   docker compose logs -f             # Follow logs from all services
+#   docker compose logs -f app         # Follow app logs only
+#   docker compose logs -f postgres    # Follow PostgreSQL logs only
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # PostgreSQL Database
+  #
+  # A single PostgreSQL database holds all tenant schemas. Each tenant's data
+  # is isolated in its own schema (e.g., tenant_alpha, tenant_beta).
+  #
+  # Key environment variables:
+  #   POSTGRES_DB:       The database name created on first start.
+  #   POSTGRES_USER:     The superuser name for the database.
+  #   POSTGRES_PASSWORD: The superuser password.
+  #
+  # Data persistence:
+  #   The postgres-data volume persists data across container restarts.
+  #   Use `docker compose down -v` to destroy it and start fresh.
+  #
+  # Health check:
+  #   Uses pg_isready to confirm PostgreSQL is accepting connections.
+  #   The Spring Boot app waits for this to be healthy before starting.
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: multitenancy-postgres
+    environment:
+      POSTGRES_DB: multitenancy_db
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: app_password
+    ports:
+      # Expose PostgreSQL on the standard port for local tooling (e.g., psql, DBeaver)
+      - "5432:5432"
+    volumes:
+      # Named volume for persistent data storage across container restarts
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready checks that PostgreSQL is ready to accept connections.
+      # -U specifies the user; -d specifies the database to check.
+      test: ["CMD-SHELL", "pg_isready -U app_user -d multitenancy_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # --------------------------------------------------------------------------
+  # Spring Boot Application (Multi-Tenancy DB Pattern backend)
+  #
+  # Built from the Dockerfile in this project root.
+  # Starts only after PostgreSQL is healthy so that the DataSource can
+  # successfully connect when TenantSchemaInitializer runs at startup.
+  #
+  # Key environment variables:
+  #   SPRING_DATASOURCE_URL:
+  #     Points to the PostgreSQL service via Docker Compose's internal DNS.
+  #     "postgres" resolves to the postgres container automatically.
+  #
+  #   APP_TENANTS:
+  #     Comma-separated list of tenant IDs to initialize at startup.
+  #     TenantSchemaInitializer creates a schema for each value.
+  #     Add new tenants here to provision them automatically on next restart.
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: multitenancy-app
+    ports:
+      - "8080:8080"
+    environment:
+      # DataSource — points to the postgres service via Docker internal DNS
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/multitenancy_db
+      SPRING_DATASOURCE_USERNAME: app_user
+      SPRING_DATASOURCE_PASSWORD: app_password
+
+      # List of tenant schemas to create at startup.
+      # Comma-separated values are interpreted as a YAML list by Spring Boot.
+      APP_TENANTS: tenant_alpha,tenant_beta
+
+      JAVA_OPTS: "-Xms128m -Xmx256m"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+# ----------------------------------------------------------------------------
+# Named volumes
+#
+# postgres-data: Stores PostgreSQL data files on the Docker host.
+#   Survives `docker compose down` but is removed by `docker compose down -v`.
+# ----------------------------------------------------------------------------
+volumes:
+  postgres-data:

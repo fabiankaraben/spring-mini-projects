@@ -1,0 +1,28 @@
+# ============================================================================
+# Test application configuration
+#
+# This file is loaded when the "test" Spring profile is active.
+# Integration tests use Testcontainers to start a real PostgreSQL instance,
+# then override the datasource URL via @DynamicPropertySource in the test class.
+# The values below are placeholders that will be overridden at runtime.
+# ============================================================================
+
+spring:
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+# Use a minimal list of tenants for tests to keep them fast
+app:
+  tenants:
+    - tenant_alpha
+    - tenant_beta
+
+# Disable console logging noise during tests
+logging:
+  level:
+    com.example.multitenancy: DEBUG
+    org.testcontainers: INFO
+    com.github.dockerjava: WARN

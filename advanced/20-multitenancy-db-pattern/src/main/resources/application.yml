@@ -1,0 +1,99 @@
+# ============================================================================
+# Application configuration for the Multi-Tenancy DB Pattern mini-project
+# ============================================================================
+
+spring:
+  application:
+    name: multitenancy-db-pattern
+
+  # --------------------------------------------------------------------------
+  # DataSource — shared HikariCP connection pool
+  #
+  # All tenants share a single connection pool that points to the PostgreSQL
+  # server (not a specific schema). The active schema is switched per-request
+  # via SET search_path in TenantConnectionProvider.
+  #
+  # In Docker Compose, these values are overridden by environment variables:
+  #   SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, etc.
+  # --------------------------------------------------------------------------
+  datasource:
+    url: jdbc:postgresql://localhost:5432/multitenancy_db
+    username: app_user
+    password: app_password
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      # Maximum number of connections in the pool.
+      # Size this based on your PostgreSQL max_connections setting and the
+      # number of concurrent requests expected.
+      maximum-pool-size: 10
+      # Minimum idle connections kept ready in the pool.
+      minimum-idle: 2
+      # Connection timeout: how long to wait for a connection from the pool.
+      connection-timeout: 30000
+      # Idle timeout: how long an idle connection is kept before being removed.
+      idle-timeout: 600000
+      # Max lifetime: connections are retired after this duration to prevent
+      # issues with stale or dead connections to PostgreSQL.
+      max-lifetime: 1800000
+
+  # --------------------------------------------------------------------------
+  # JPA / Hibernate configuration
+  # --------------------------------------------------------------------------
+  jpa:
+    # Do NOT let Hibernate auto-create or auto-drop schemas.
+    # Schema initialization is handled by TenantSchemaInitializer which creates
+    # each tenant schema explicitly and applies the schema.sql DDL script.
+    generate-ddl: false
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        # Use PostgreSQL-specific SQL dialect.
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        # Format SQL statements in logs for readability (useful during development).
+        format_sql: true
+        # Explicitly disable Hibernate's own DDL management.
+        # TenantSchemaInitializer handles schema creation.
+        hbm2ddl:
+          auto: none
+
+  # --------------------------------------------------------------------------
+  # Spring Boot will NOT run its default schema.sql / data.sql scripts.
+  # We manage schema initialization ourselves in TenantSchemaInitializer.
+  # --------------------------------------------------------------------------
+  sql:
+    init:
+      mode: never
+
+# --------------------------------------------------------------------------
+# Application-specific configuration
+# --------------------------------------------------------------------------
+app:
+  # The list of tenant IDs that the application knows about.
+  # TenantSchemaInitializer creates a PostgreSQL schema for each entry here
+  # at startup (e.g., schema "tenant_alpha", "tenant_beta").
+  #
+  # To add a new tenant: add its ID to this list and restart the application.
+  # The schema and tables will be created automatically on the next startup.
+  tenants:
+    - tenant_alpha
+    - tenant_beta
+
+# --------------------------------------------------------------------------
+# Actuator endpoints — expose health for Docker Compose healthcheck probes
+# --------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# --------------------------------------------------------------------------
+# Server configuration
+# --------------------------------------------------------------------------
+server:
+  port: 8080
