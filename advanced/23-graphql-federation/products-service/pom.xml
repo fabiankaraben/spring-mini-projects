@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!--
+		Products Service — GraphQL Subgraph
+
+		This module owns the Product bounded-context within the federation.
+		It exposes a standalone GraphQL API (via Spring for GraphQL) that the
+		gateway can introspect and delegate queries to.
+
+		Responsibilities:
+		  - CRUD-style queries for Product entities (list, find by ID)
+		  - In-memory repository seeded with sample data (no external DB needed)
+		  - Exposes schema introspection so the gateway can stitch its types
+	-->
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+
+	<groupId>com.example</groupId>
+	<artifactId>products-service</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>products-service</name>
+	<description>GraphQL subgraph owning Product data for the federation demo</description>
+
+	<properties>
+		<java.version>21</java.version>
+		<!-- Testcontainers BOM version -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<!--
+				Testcontainers BOM:
+				Pins all org.testcontainers:* artifacts to the same version so
+				individual test dependencies need no explicit version.
+			-->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<dependencies>
+
+		<!--
+			Spring for GraphQL (WebMVC transport):
+			Provides the @QueryMapping, @SchemaMapping annotations, the
+			GraphQL schema loader, and the /graphql HTTP endpoint backed by
+			Spring MVC + embedded Tomcat. This is the core dependency for
+			building a GraphQL server with Spring Boot.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-graphql</artifactId>
+		</dependency>
+
+		<!--
+			Spring Web (MVC):
+			Required transport layer for Spring for GraphQL when using HTTP.
+			Provides the DispatcherServlet that routes POST /graphql requests
+			to the GraphQL handler.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Actuator:
+			Exposes /actuator/health endpoint used by Docker Compose health
+			checks and by Testcontainers wait strategies.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!--
+			Spring Boot Test:
+			Pulls in JUnit 5, AssertJ, Mockito, and Spring test infrastructure.
+			Also includes GraphQlTester / HttpGraphQlTester for testing GraphQL
+			endpoints via MockMvc.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Spring GraphQL Test:
+			Provides GraphQlTester — a fluent DSL for executing GraphQL
+			operations in tests without starting a real HTTP server (uses
+			MockMvc under the hood).
+		-->
+		<dependency>
+			<groupId>org.springframework.graphql</groupId>
+			<artifactId>spring-graphql-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers JUnit 5 integration:
+			@Testcontainers + @Container lifecycle management.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers core:
+			GenericContainer and Wait strategies for spinning up Docker
+			containers in integration tests.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+	</dependencies>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin: packages the application as an executable fat-jar -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+			<!--
+				Maven Surefire Plugin: configures test execution for Java 21+.
+				argLine:
+				  -XX:+EnableDynamicAgentLoading  silences ByteBuddy warnings on Java 21+
+				  -Xshare:off                      avoids CDS conflicts with Mockito agents
+				  -Dnet.bytebuddy.experimental=true  needed on Java 25+ (ByteBuddy does not
+				                                     officially support Java 25 yet)
+				  add-opens flags                  grant Mockito deep reflection access
+				environmentVariables:
+				  DOCKER_API_VERSION=1.44           fixes Docker Desktop 29+ which rejects
+				                                    the legacy v1.24 API path docker-java
+				                                    uses by default.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off -Dnet.bytebuddy.experimental=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<!-- Ensures docker-java uses API v1.44 (Docker Desktop 29+ requires this) -->
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

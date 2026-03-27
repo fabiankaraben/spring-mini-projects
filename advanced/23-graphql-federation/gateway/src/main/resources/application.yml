@@ -1,0 +1,49 @@
+# ============================================================================
+# Gateway — Application Configuration
+# ============================================================================
+
+server:
+  # Port 8080 — the main entry point for all external GraphQL clients.
+  # All queries go here; the gateway routes them to the appropriate subgraph.
+  port: 8080
+
+spring:
+  application:
+    name: graphql-federation-gateway
+
+  graphql:
+    # GraphiQL is the browser-based GraphQL IDE. Enable it in development to
+    # explore the unified supergraph at http://localhost:8080/graphiql
+    graphiql:
+      enabled: true
+    # Expose schema introspection so clients can discover the supergraph types.
+    schema:
+      introspection:
+        enabled: true
+
+# ============================================================================
+# Federation configuration
+#
+# These properties hold the base URLs of the two subgraph services.
+# The gateway's ProductsClient and ReviewsClient read these values via
+# @Value("${federation.products-url}") / @Value("${federation.reviews-url}").
+#
+# When running locally (without Docker Compose) start each service individually:
+#   products-service on port 8081
+#   reviews-service  on port 8082
+#   gateway          on port 8080
+#
+# When running via Docker Compose, these are overridden by environment variables:
+#   FEDERATION_PRODUCTS_URL=http://products-service:8081
+#   FEDERATION_REVIEWS_URL=http://reviews-service:8082
+# ============================================================================
+federation:
+  products-url: http://localhost:8081
+  reviews-url: http://localhost:8082
+
+# Spring Boot Actuator — expose health endpoint for Docker Compose health checks.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info

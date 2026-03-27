@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!--
+		Parent POM for the GraphQL Federation mini-project.
+
+		This is a Maven multi-module build that groups three independent
+		Spring Boot applications:
+
+		  1. products-service  — GraphQL subgraph that owns Product data
+		  2. reviews-service   — GraphQL subgraph that owns Review data and
+		                         references products by ID
+		  3. gateway           — GraphQL gateway that stitches both subgraph
+		                         schemas into a single unified API
+
+		Each module is a fully self-contained Spring Boot application with its
+		own src/, resources, and tests. They share no runtime classpath; the
+		parent POM exists only to allow building all three with a single
+		`./mvnw clean test` or `./mvnw package` command from this root.
+	-->
+
+	<groupId>com.example</groupId>
+	<artifactId>graphql-federation</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>pom</packaging>
+	<name>graphql-federation</name>
+	<description>
+		Spring Boot mini-project demonstrating GraphQL Federation:
+		two independent subgraph services (products and reviews) whose schemas
+		are composed into a single unified graph by a gateway service.
+		Includes JUnit 5 unit tests and Testcontainers integration tests.
+	</description>
+
+	<!-- The three child modules that make up this federation -->
+	<modules>
+		<module>products-service</module>
+		<module>reviews-service</module>
+		<module>gateway</module>
+	</modules>
+
+	<properties>
+		<java.version>21</java.version>
+		<!-- Single Spring Boot version shared across all child modules -->
+		<spring-boot.version>3.4.3</spring-boot.version>
+		<!-- Testcontainers BOM version used in every module's tests -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+
+</project>

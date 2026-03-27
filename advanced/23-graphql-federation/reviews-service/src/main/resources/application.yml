@@ -1,0 +1,30 @@
+# ============================================================================
+# Reviews Service — Application Configuration
+# ============================================================================
+
+server:
+  # Port 8082 avoids conflict with the gateway (8080) and products-service (8081)
+  # when all three services run locally on the same host.
+  port: 8082
+
+spring:
+  application:
+    name: reviews-service
+
+  graphql:
+    # GraphiQL is the browser-based GraphQL IDE. Enable it in development to
+    # explore the schema interactively at http://localhost:8082/graphiql
+    graphiql:
+      enabled: true
+    # Expose the schema introspection endpoint. This is required so that the
+    # gateway can call __schema to discover all types and fields at startup.
+    schema:
+      introspection:
+        enabled: true
+
+# Spring Boot Actuator — expose health endpoint for Docker Compose health checks.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info

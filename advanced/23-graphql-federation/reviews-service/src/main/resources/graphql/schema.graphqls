@@ -1,0 +1,84 @@
+# ============================================================================
+# Reviews Service — GraphQL Schema
+#
+# This schema defines the Review type and all queries exposed by the
+# reviews-service subgraph. The gateway introspects this schema and stitches
+# it with the products-service schema to form the unified supergraph.
+#
+# Note on the productId field:
+#   Each Review carries a productId (the "foreign key") rather than embedding
+#   a full Product object. The gateway is responsible for resolving the full
+#   Product when a client requests it through the unified supergraph. This keeps
+#   the subgraph schemas decoupled — reviews-service knows nothing about the
+#   internal structure of products-service.
+# ============================================================================
+
+# ---- Review type -----------------------------------------------------------
+
+"""
+A customer review for a product.
+
+This type is owned by the reviews-service subgraph. The gateway exposes
+it to clients as part of the unified supergraph schema, joined with Product
+data from the products-service when a federated query requests it.
+"""
+type Review {
+    "Unique review identifier (e.g. \"rev-1\")."
+    id: ID!
+
+    """
+    ID of the product this review is for.
+    This references Product.id in the products-service.
+    The gateway uses this to fetch full product details for federated queries.
+    """
+    productId: ID!
+
+    "Display name of the review author."
+    author: String!
+
+    "Full text content of the review."
+    body: String!
+
+    "Numeric rating from 1 (worst) to 5 (best)."
+    rating: Int!
+}
+
+# ---- Query type ------------------------------------------------------------
+
+"""
+Root query type for the reviews subgraph.
+"""
+type Query {
+
+    """
+    Returns all reviews across all products.
+
+    Example:
+      query { reviews { id productId author rating } }
+    """
+    reviews: [Review!]!
+
+    """
+    Returns a single review by its unique ID, or null if not found.
+
+    Example:
+      query { review(id: "rev-1") { id author body rating } }
+    """
+    review(id: ID!): Review
+
+    """
+    Returns all reviews for the specified product.
+
+    Example:
+      query { reviewsByProduct(productId: "prod-1") { id author rating body } }
+    """
+    reviewsByProduct(productId: ID!): [Review!]!
+
+    """
+    Returns all reviews with a rating >= minRating.
+
+    Example:
+      query { reviewsByMinRating(minRating: 4) { id author rating } }
+    """
+    reviewsByMinRating(minRating: Int!): [Review!]!
+}

@@ -1,0 +1,137 @@
+# ============================================================================
+# Docker Compose file for the GraphQL Federation mini-project
+#
+# This file defines a three-service stack that mirrors the federation
+# architecture:
+#
+#   1. products-service (port 8081)
+#      Standalone GraphQL subgraph owning the Product bounded-context.
+#      Exposes POST /graphql, GET /graphiql, GET /actuator/health.
+#
+#   2. reviews-service (port 8082)
+#      Standalone GraphQL subgraph owning the Review bounded-context.
+#      Exposes POST /graphql, GET /graphiql, GET /actuator/health.
+#
+#   3. gateway (port 8080)
+#      The federation gateway that stitches both subgraphs into a single
+#      unified GraphQL API. Depends on both subgraph services being healthy.
+#
+# Architecture diagram:
+#   Client
+#     │  POST /graphql
+#     ▼
+#   gateway:8080
+#     ├──► products-service:8081/graphql
+#     └──► reviews-service:8082/graphql
+#
+# Usage:
+#   docker compose up --build          # Build all images and start all services
+#   docker compose up --build -d       # Same, in detached (background) mode
+#   docker compose down                # Stop and remove containers
+#   docker compose logs -f             # Follow logs from all services
+#   docker compose logs -f gateway     # Follow gateway logs only
+#   docker compose logs -f products-service
+#   docker compose logs -f reviews-service
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Products Service — GraphQL subgraph (Products bounded-context)
+  #
+  # Built from products-service/Dockerfile.
+  # No external dependencies — uses an in-memory repository seeded at startup.
+  #
+  # Ports:
+  #   8081: GraphQL endpoint (POST /graphql) and GraphiQL IDE (GET /graphiql)
+  #
+  # Health check:
+  #   Polls /actuator/health which Spring Boot Actuator exposes.
+  # --------------------------------------------------------------------------
+  products-service:
+    build:
+      context: products-service
+      dockerfile: Dockerfile
+    container_name: graphql-federation-products
+    ports:
+      # Expose on the host so you can also query it directly for debugging
+      - "8081:8081"
+    environment:
+      JAVA_OPTS: "-Xms64m -Xmx128m"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # Reviews Service — GraphQL subgraph (Reviews bounded-context)
+  #
+  # Built from reviews-service/Dockerfile.
+  # No external dependencies — uses an in-memory repository seeded at startup.
+  #
+  # Ports:
+  #   8082: GraphQL endpoint (POST /graphql) and GraphiQL IDE (GET /graphiql)
+  # --------------------------------------------------------------------------
+  reviews-service:
+    build:
+      context: reviews-service
+      dockerfile: Dockerfile
+    container_name: graphql-federation-reviews
+    ports:
+      - "8082:8082"
+    environment:
+      JAVA_OPTS: "-Xms64m -Xmx128m"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # Gateway — Federation gateway (unified supergraph)
+  #
+  # Built from gateway/Dockerfile.
+  # Depends on both subgraph services being healthy before starting so that
+  # the gateway's WebClient can successfully connect on first request.
+  #
+  # Key environment variables:
+  #   FEDERATION_PRODUCTS_URL: "http://products-service:8081"
+  #     "products-service" resolves via Docker Compose's internal DNS.
+  #   FEDERATION_REVIEWS_URL: "http://reviews-service:8082"
+  #     "reviews-service" resolves via Docker Compose's internal DNS.
+  #
+  # These override the localhost defaults in gateway/application.yml.
+  #
+  # Ports:
+  #   8080: The main public-facing GraphQL endpoint for all clients.
+  #         GraphiQL IDE available at http://localhost:8080/graphiql
+  # --------------------------------------------------------------------------
+  gateway:
+    build:
+      context: gateway
+      dockerfile: Dockerfile
+    container_name: graphql-federation-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      # Override subgraph URLs to use Docker Compose's internal service DNS
+      FEDERATION_PRODUCTS_URL: http://products-service:8081
+      FEDERATION_REVIEWS_URL: http://reviews-service:8082
+      JAVA_OPTS: "-Xms64m -Xmx128m"
+    depends_on:
+      products-service:
+        condition: service_healthy
+      reviews-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 40s

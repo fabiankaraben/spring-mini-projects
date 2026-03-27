@@ -1,0 +1,84 @@
+# ============================================================================
+# Products Service — GraphQL Schema
+#
+# This schema defines the Product type and all queries exposed by the
+# products-service subgraph. The gateway introspects this schema and stitches
+# it together with the reviews-service schema to form the unified supergraph.
+#
+# Spring for GraphQL automatically discovers all *.graphqls files located in
+# src/main/resources/graphql/ and merges them into a single schema at startup.
+# ============================================================================
+
+# ---- Scalar types ----------------------------------------------------------
+# GraphQL has built-in scalars: String, Int, Float, Boolean, ID.
+# We add a Float-based BigDecimal mapping. In this project we use Float for
+# price because Spring for GraphQL maps Java BigDecimal <-> GraphQL Float.
+# For production code consider a custom "BigDecimal" scalar.
+
+# ---- Product type ----------------------------------------------------------
+
+"""
+A product available in the catalogue.
+
+This type is owned by the products-service subgraph. The gateway exposes
+it to clients as part of the unified supergraph schema.
+"""
+type Product {
+    "Unique product identifier (e.g. \"prod-1\")."
+    id: ID!
+
+    "Human-readable product name."
+    name: String!
+
+    "Short description of the product."
+    description: String!
+
+    "Product price in the base currency (USD)."
+    price: Float!
+
+    "Category label this product belongs to (e.g. \"Electronics\")."
+    category: String!
+
+    "Whether the product is currently available for purchase."
+    inStock: Boolean!
+}
+
+# ---- Query type ------------------------------------------------------------
+
+"""
+Root query type for the products subgraph.
+"""
+type Query {
+
+    """
+    Returns all products in the catalogue.
+
+    Example:
+      query { products { id name price } }
+    """
+    products: [Product!]!
+
+    """
+    Returns a single product by its unique ID, or null if not found.
+
+    Example:
+      query { product(id: "prod-1") { id name price inStock } }
+    """
+    product(id: ID!): Product
+
+    """
+    Returns all products that belong to the given category (case-insensitive).
+
+    Example:
+      query { productsByCategory(category: "Electronics") { id name price } }
+    """
+    productsByCategory(category: String!): [Product!]!
+
+    """
+    Returns all products that are currently in stock.
+
+    Example:
+      query { productsInStock { id name inStock } }
+    """
+    productsInStock: [Product!]!
+}

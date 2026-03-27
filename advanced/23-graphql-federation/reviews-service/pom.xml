@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!--
+		Reviews Service — GraphQL Subgraph
+
+		This module owns the Review bounded-context within the federation.
+		It exposes a standalone GraphQL API for Review entities, where each
+		Review references a productId. The gateway stitches this service
+		together with the products-service so that clients can query reviews
+		alongside full product details in a single GraphQL operation.
+
+		Responsibilities:
+		  - CRUD-style queries for Review entities (list, find by ID, by product)
+		  - In-memory repository seeded with sample data (no external DB needed)
+		  - Exposes schema introspection so the gateway can stitch its types
+	-->
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+
+	<groupId>com.example</groupId>
+	<artifactId>reviews-service</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>reviews-service</name>
+	<description>GraphQL subgraph owning Review data for the federation demo</description>
+
+	<properties>
+		<java.version>21</java.version>
+		<!-- Testcontainers BOM version -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<!--
+				Testcontainers BOM:
+				Pins all org.testcontainers:* artifacts to the same version.
+			-->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<dependencies>
+
+		<!--
+			Spring for GraphQL (WebMVC transport):
+			Provides @QueryMapping, @SchemaMapping annotations, the GraphQL
+			schema loader, and the /graphql HTTP endpoint.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-graphql</artifactId>
+		</dependency>
+
+		<!--
+			Spring Web (MVC):
+			Required transport layer for Spring for GraphQL with HTTP.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Actuator:
+			Exposes /actuator/health for Docker Compose and test wait strategies.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!--
+			Spring Boot Test:
+			JUnit 5, AssertJ, Mockito, and Spring test infrastructure.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Spring GraphQL Test:
+			GraphQlTester — fluent DSL for GraphQL operation testing.
+		-->
+		<dependency>
+			<groupId>org.springframework.graphql</groupId>
+			<artifactId>spring-graphql-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers JUnit 5 integration:
+			@Testcontainers + @Container lifecycle management.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers core:
+			GenericContainer and Wait strategies.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+	</dependencies>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin: packages the application as an executable fat-jar -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+			<!--
+				Maven Surefire Plugin: configures test execution for Java 21+.
+				See products-service/pom.xml for full argLine explanation.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off -Dnet.bytebuddy.experimental=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

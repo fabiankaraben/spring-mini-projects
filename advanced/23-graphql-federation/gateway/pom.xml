@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<!--
+		Gateway — GraphQL Federation Gateway
+
+		This module implements a "schema-stitching" gateway using Spring for
+		GraphQL and its built-in schema inspection / delegation capabilities.
+
+		How federation works in this project:
+		  1. The gateway holds its own schema that declares all types from both
+		     subgraphs (products + reviews) in a unified "supergraph" schema.
+		  2. At runtime the gateway delegates field resolution to the appropriate
+		     subgraph service via HTTP POST /graphql (using WebClient).
+		  3. Clients send a single GraphQL request to the gateway and get back
+		     data that may come from multiple subgraph services transparently.
+
+		Note on federation approach:
+		  This project uses "schema-stitching" (manual delegation) rather than
+		  the Apollo Federation spec (@key directives). Spring for GraphQL does
+		  not yet natively support Apollo Federation, so the gateway manually
+		  routes sub-queries to each service and merges the results. This is
+		  the educational, transparent approach that clearly shows what happens
+		  under the hood.
+
+		Responsibilities:
+		  - Exposes a unified /graphql endpoint to external clients
+		  - Holds the merged supergraph schema (products + reviews types)
+		  - Delegates Product queries to products-service
+		  - Delegates Review queries to reviews-service
+		  - Stitches Product and Review data for combined queries
+	-->
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+
+	<groupId>com.example</groupId>
+	<artifactId>gateway</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>gateway</name>
+	<description>GraphQL Federation Gateway that stitches products and reviews subgraphs</description>
+
+	<properties>
+		<java.version>21</java.version>
+		<!-- Testcontainers BOM version -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<!--
+				Testcontainers BOM:
+				Pins all org.testcontainers:* artifacts to the same version.
+			-->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<dependencies>
+
+		<!--
+			Spring for GraphQL (WebMVC transport):
+			Provides the @QueryMapping, @SchemaMapping annotations, the
+			GraphQL schema loader, and the /graphql HTTP endpoint. The
+			gateway uses @QueryMapping to intercept top-level fields and
+			delegate them to downstream subgraph services.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-graphql</artifactId>
+		</dependency>
+
+		<!--
+			Spring Web (MVC):
+			Required transport layer. Also provides RestClient / WebClient
+			factories used to make HTTP POST /graphql calls to subgraph
+			services.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!--
+			Spring WebFlux (WebClient):
+			WebClient is the modern, non-blocking HTTP client for making
+			downstream calls to the subgraph services. It is available via
+			the webflux dependency even when the gateway itself uses blocking
+			Spring MVC as its server transport.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webflux</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Actuator:
+			Exposes /actuator/health for Docker Compose health checks.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!--
+			Spring Boot Test:
+			JUnit 5, AssertJ, Mockito, and Spring test infrastructure.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Spring GraphQL Test:
+			GraphQlTester — fluent DSL for GraphQL operation testing against
+			the gateway endpoint.
+		-->
+		<dependency>
+			<groupId>org.springframework.graphql</groupId>
+			<artifactId>spring-graphql-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers JUnit 5 integration:
+			@Testcontainers + @Container lifecycle management. The gateway
+			integration test starts both subgraph services in containers and
+			points the gateway's WebClient at their mapped ports.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers core:
+			GenericContainer + Wait strategies used to start the products and
+			reviews service containers for gateway integration tests.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			WireMock standalone (via Testcontainers):
+			Provides HTTP mock servers so that gateway unit/integration tests
+			can stub the subgraph HTTP responses without needing real running
+			services.
+		-->
+		<dependency>
+			<groupId>org.wiremock</groupId>
+			<artifactId>wiremock-standalone</artifactId>
+			<version>3.9.2</version>
+			<scope>test</scope>
+		</dependency>
+
+	</dependencies>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin: packages the application as an executable fat-jar -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+			<!--
+				Maven Surefire Plugin: configures test execution for Java 21+.
+				See products-service/pom.xml for full argLine explanation.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off -Dnet.bytebuddy.experimental=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

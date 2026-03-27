@@ -1,0 +1,188 @@
+# ============================================================================
+# Gateway — Unified Supergraph Schema
+#
+# This schema is the "supergraph": the merged view of all types from every
+# subgraph, exposed to external clients through the gateway.
+#
+# Design principle:
+#   - Product types come from products-service
+#   - Review types come from reviews-service
+#   - ProductWithReviews is a gateway-level composite type that DOES NOT exist
+#     in either subgraph — it is assembled by the gateway by calling both
+#     services and merging their responses.
+#
+# The gateway's @QueryMapping resolvers delegate each query to the appropriate
+# downstream service. Clients only ever talk to the gateway — they have no
+# knowledge of how many services exist behind it.
+# ============================================================================
+
+# ---- Product type (owned by products-service) ------------------------------
+
+"""
+A product available in the catalogue.
+Data is sourced from the products-service subgraph.
+"""
+type Product {
+    "Unique product identifier."
+    id: ID!
+    "Human-readable product name."
+    name: String!
+    "Short product description."
+    description: String!
+    "Product price in USD."
+    price: Float!
+    "Category label (e.g. \"Electronics\", \"Furniture\")."
+    category: String!
+    "Whether the product is currently available for purchase."
+    inStock: Boolean!
+}
+
+# ---- Review type (owned by reviews-service) --------------------------------
+
+"""
+A customer review for a product.
+Data is sourced from the reviews-service subgraph.
+"""
+type Review {
+    "Unique review identifier."
+    id: ID!
+    "ID of the reviewed product (references Product.id)."
+    productId: ID!
+    "Display name of the review author."
+    author: String!
+    "Full text content of the review."
+    body: String!
+    "Numeric rating from 1 (worst) to 5 (best)."
+    rating: Int!
+}
+
+# ---- ProductWithReviews — gateway-level composite type ---------------------
+
+"""
+A product together with all its reviews.
+
+This is a gateway-native composite type that does not exist in any
+individual subgraph. The gateway assembles it by:
+  1. Calling products-service for the Product data
+  2. Calling reviews-service for the Review data
+  3. Merging both into this unified response
+
+This type is the clearest demonstration of federation value:
+clients get data from multiple services in a single request.
+"""
+type ProductWithReviews {
+    "The product details, sourced from the products-service."
+    product: Product!
+    "All reviews for this product, sourced from the reviews-service."
+    reviews: [Review!]!
+}
+
+# ---- Query type — unified supergraph entry points --------------------------
+
+"""
+Root query type for the unified supergraph gateway.
+"""
+type Query {
+
+    # ---- Product queries (delegated to products-service) -------------------
+
+    """
+    Returns all products in the catalogue.
+
+    Example:
+      query { products { id name price category } }
+    """
+    products: [Product!]!
+
+    """
+    Returns a single product by its unique ID, or null if not found.
+
+    Example:
+      query { product(id: "prod-1") { id name price inStock } }
+    """
+    product(id: ID!): Product
+
+    """
+    Returns all products that belong to the given category (case-insensitive).
+
+    Example:
+      query { productsByCategory(category: "Electronics") { id name price } }
+    """
+    productsByCategory(category: String!): [Product!]!
+
+    """
+    Returns all products that are currently in stock.
+
+    Example:
+      query { productsInStock { id name price } }
+    """
+    productsInStock: [Product!]!
+
+    # ---- Review queries (delegated to reviews-service) ---------------------
+
+    """
+    Returns all reviews across all products.
+
+    Example:
+      query { reviews { id productId author rating } }
+    """
+    reviews: [Review!]!
+
+    """
+    Returns a single review by its unique ID, or null if not found.
+
+    Example:
+      query { review(id: "rev-1") { id author body rating } }
+    """
+    review(id: ID!): Review
+
+    """
+    Returns all reviews for the specified product.
+
+    Example:
+      query { reviewsByProduct(productId: "prod-1") { id author rating body } }
+    """
+    reviewsByProduct(productId: ID!): [Review!]!
+
+    """
+    Returns all reviews with a rating >= minRating.
+
+    Example:
+      query { reviewsByMinRating(minRating: 4) { id author rating } }
+    """
+    reviewsByMinRating(minRating: Int!): [Review!]!
+
+    # ---- Federated (stitched) queries — combine data from both subgraphs ---
+
+    """
+    THE core federation query: returns a product together with all its reviews.
+
+    The gateway fetches the product from products-service and the reviews
+    from reviews-service, then merges them into a single composite response.
+    The client sees one unified object without knowing about two services.
+
+    Returns null if the product ID does not exist.
+
+    Example:
+      query {
+        productWithReviews(productId: "prod-1") {
+          product { id name price category }
+          reviews { id author body rating }
+        }
+      }
+    """
+    productWithReviews(productId: ID!): ProductWithReviews
+
+    """
+    Returns ALL products together with their reviews (full cross-service dataset).
+
+    Example:
+      query {
+        allProductsWithReviews {
+          product { id name category }
+          reviews { author rating }
+        }
+      }
+    """
+    allProductsWithReviews: [ProductWithReviews!]!
+}
