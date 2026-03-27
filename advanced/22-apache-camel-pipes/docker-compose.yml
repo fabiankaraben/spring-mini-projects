@@ -1,0 +1,140 @@
+# ============================================================================
+# Docker Compose file for the Apache Camel Pipes mini-project
+#
+# This file defines a two-service stack:
+#   1. artemis — ActiveMQ Artemis JMS broker.
+#               The Camel pipeline dispatches processed orders to queues on
+#               this broker (orders.priority and orders.standard).
+#   2. app    — The Spring Boot backend.  Exposes a REST API at POST /api/orders
+#               that feeds messages into a five-stage Camel pipeline.
+#
+# Pipeline stages (Pipes and Filters EIP):
+#   ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐
+#   │  Validation  │ → │  Enrichment  │ → │  Classification  │
+#   └──────────────┘   └──────────────┘   └──────────────────┘
+#          ↓ (on error)        ↓ (happy path)
+#   seda:dead-letter    ┌──────────────┐   ┌─────────────────┐
+#                       │   Dispatch   │ → │   Persistence   │
+#                       └──────────────┘   └─────────────────┘
+#                              ↓
+#                       JMS queue (Artemis)
+#                       + file system write
+#
+# Port mapping:
+#   - Artemis CORE/AMQP: host 61616 → container 61616
+#   - Artemis web console: host 8161 → container 8161
+#   - App REST API:  host 8080 → container 8080
+#
+# Usage:
+#   docker compose up --build          # Build the app image and start both services
+#   docker compose up --build -d       # Same, in detached (background) mode
+#   docker compose down                # Stop and remove containers
+#   docker compose down -v             # Stop containers AND remove the data volume
+#   docker compose logs -f             # Follow logs from all services
+#   docker compose logs -f app         # Follow app logs only
+#   docker compose logs -f artemis     # Follow Artemis broker logs only
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # ActiveMQ Artemis — JMS message broker
+  #
+  # Artemis is a high-performance, multi-protocol messaging broker.
+  # The Camel pipeline sends processed orders to two queues:
+  #   - orders.priority  — for high-value orders (totalAmount >= threshold)
+  #   - orders.standard  — for regular orders
+  #
+  # Key configuration:
+  #   image: apache/activemq-artemis:2.38.0 — official multi-arch image (AMD64 + ARM64)
+  #   ARTEMIS_USER / ARTEMIS_PASSWORD — broker authentication credentials
+  #
+  # Ports:
+  #   61616: CORE/AMQP/OpenWire acceptor — used by the Spring Artemis client
+  #   8161:  HTTP management web console — access at http://localhost:8161
+  #
+  # Health check:
+  #   Polls the management console HTTP endpoint which returns 200 when the
+  #   broker is fully initialised and ready to accept connections.
+  # --------------------------------------------------------------------------
+  artemis:
+    image: apache/activemq-artemis:2.38.0
+    container_name: camel-pipes-artemis
+    ports:
+      # CORE protocol port — used by Spring Boot's Artemis client
+      - "61616:61616"
+      # Web management console — visit http://localhost:8161 to inspect queues
+      - "8161:8161"
+    environment:
+      # Broker credentials — must match app environment variables below
+      ARTEMIS_USER: artemis
+      ARTEMIS_PASSWORD: artemis
+    healthcheck:
+      # The management console returns HTTP 200 when the broker is fully ready.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8161/ | grep -q 'ActiveMQ' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # Spring Boot Application (Apache Camel Pipes backend)
+  #
+  # Built from the Dockerfile in this project root.
+  # Starts only after Artemis is healthy so that the Camel JMS component can
+  # successfully connect to the broker when the application context starts.
+  #
+  # Key environment variables:
+  #   SPRING_ARTEMIS_BROKER_URL: "tcp://artemis:61616" — "artemis" resolves via
+  #                               Docker Compose internal DNS to the broker container.
+  #   SPRING_ARTEMIS_USER/PASSWORD: broker credentials matching the Artemis container.
+  #   APP_PIPELINE_PRIORITY_THRESHOLD: orders >= this amount are classified PRIORITY.
+  #   APP_PIPELINE_VAT_RATE: VAT rate applied in the enrichment stage.
+  #   APP_OUTPUT_DIR: directory inside the container where JSON files are written.
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: camel-pipes-app
+    ports:
+      - "8080:8080"
+    environment:
+      # Artemis broker — "artemis" resolves via Docker Compose internal DNS
+      SPRING_ARTEMIS_BROKER_URL: tcp://artemis:61616
+      SPRING_ARTEMIS_USER: artemis
+      SPRING_ARTEMIS_PASSWORD: artemis
+
+      # Pipeline tuning — adjust these to see different routing behaviours
+      APP_PIPELINE_PRIORITY_THRESHOLD: 300
+      APP_PIPELINE_VAT_RATE: 0.21
+
+      # Output directory inside the container — mounted to a named volume
+      APP_OUTPUT_DIR: /app/output/orders
+
+      JAVA_OPTS: "-Xms128m -Xmx256m"
+    volumes:
+      # Named volume so JSON output files persist across container restarts.
+      # Inspect written files: docker compose exec app ls /app/output/orders
+      - order-output:/app/output/orders
+    depends_on:
+      artemis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+# ----------------------------------------------------------------------------
+# Named volumes
+#
+# order-output: Stores JSON files written by the Camel file component.
+#   Survives `docker compose down` but is removed by `docker compose down -v`.
+# ----------------------------------------------------------------------------
+volumes:
+  order-output:

@@ -1,0 +1,32 @@
+# ============================================================================
+# Test application configuration
+#
+# This file is loaded when the "test" Spring profile is active.
+# Integration tests use Testcontainers to start a real ActiveMQ Artemis instance
+# and override the broker URL via @DynamicPropertySource in the test class.
+# ============================================================================
+
+spring:
+  artemis:
+    # Use native mode — integration tests override broker-url via @DynamicPropertySource
+    mode: native
+    user: artemis
+    password: artemis
+
+app:
+  pipeline:
+    priority-threshold: 300
+    vat-rate: 0.21
+  output:
+    # Write test output files to the build directory so they are cleaned by mvn clean
+    dir: ./target/test-output/orders
+
+# Reduce log noise during tests — only show our code at DEBUG, suppress framework chatter
+logging:
+  level:
+    com.example.camel: DEBUG
+    org.apache.camel: WARN
+    org.apache.activemq: WARN
+    org.springframework.jms: WARN
+    org.testcontainers: INFO
+    com.github.dockerjava: WARN

@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.3</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.example</groupId>
+	<artifactId>apache-camel-pipes</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>apache-camel-pipes</name>
+	<description>
+		Spring Boot mini-project demonstrating Apache Camel Pipes and Filters pattern.
+		Messages are ingested via a REST endpoint, then routed through a pipeline of
+		transformation and enrichment steps before being dispatched to different output
+		channels (in-memory queues, file system, dead-letter channel).
+		Includes JUnit 5 unit tests for domain logic and full integration tests with
+		Testcontainers (ActiveMQ Artemis container).
+	</description>
+
+	<properties>
+		<java.version>21</java.version>
+		<!-- Apache Camel BOM version - pins all camel-* artifacts in sync -->
+		<camel.version>4.10.2</camel.version>
+		<!-- Testcontainers BOM version -->
+		<testcontainers.version>1.21.3</testcontainers.version>
+	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<!--
+				Apache Camel BOM (Bill of Materials):
+				Pins every camel-* artifact to the same compatible release so you never
+				have to specify a version on individual Camel dependencies below.
+			-->
+			<dependency>
+				<groupId>org.apache.camel.springboot</groupId>
+				<artifactId>camel-spring-boot-bom</artifactId>
+				<version>${camel.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+
+			<!--
+				Testcontainers BOM:
+				Pins all org.testcontainers:* artifacts to the same compatible version.
+			-->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<dependencies>
+
+		<!--
+			Spring Web (MVC):
+			Provides the DispatcherServlet, @RestController, and Jackson JSON support.
+			Used to expose REST endpoints that feed messages into the Camel pipeline.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<!--
+			Bean Validation (Hibernate Validator):
+			Provides @NotBlank, @NotNull, etc. for request DTO validation.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot Actuator:
+			Exposes /actuator/health and /actuator/info endpoints.
+			The health endpoint is consumed by Docker Compose healthcheck probes.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!--
+			Apache Camel Spring Boot Starter:
+			Auto-configures the Camel context, registers all RouteBuilder beans,
+			and wires Camel lifecycle into the Spring application lifecycle.
+			This is the entry point for all Camel functionality.
+		-->
+		<dependency>
+			<groupId>org.apache.camel.springboot</groupId>
+			<artifactId>camel-spring-boot-starter</artifactId>
+		</dependency>
+
+		<!--
+			Camel REST DSL + Servlet component:
+			Allows defining REST endpoints directly in Camel RouteBuilders using
+			the rest() DSL. The servlet component bridges Camel REST routes to the
+			embedded Spring MVC / Tomcat servlet container so no separate HTTP
+			server is needed.
+		-->
+		<dependency>
+			<groupId>org.apache.camel.springboot</groupId>
+			<artifactId>camel-servlet-starter</artifactId>
+		</dependency>
+
+		<!--
+			Camel Jackson (JSON) data format:
+			Marshals and unmarshals Java objects to/from JSON within Camel routes.
+			Used in the pipeline to convert order payloads to/from POJOs.
+		-->
+		<dependency>
+			<groupId>org.apache.camel.springboot</groupId>
+			<artifactId>camel-jackson-starter</artifactId>
+		</dependency>
+
+		<!--
+			Camel JMS + ActiveMQ Artemis:
+			Provides the jms() component so Camel routes can send to and receive
+			from JMS queues/topics. ActiveMQ Artemis is the embedded JMS broker
+			used in development; in production a standalone broker is used via
+			Docker Compose.
+		-->
+		<dependency>
+			<groupId>org.apache.camel.springboot</groupId>
+			<artifactId>camel-jms-starter</artifactId>
+		</dependency>
+
+		<!--
+			Spring Boot ActiveMQ Artemis Starter:
+			Auto-configures a ConnectionFactory pointing to an Artemis broker.
+			In development/test the embedded broker is used; Docker Compose
+			provides a standalone broker for production-like runs.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-artemis</artifactId>
+		</dependency>
+
+		<!--
+			Camel Bean component:
+			Lets route steps call plain Java bean methods via .bean() in the DSL.
+			Used for transformation and enrichment steps in the pipeline.
+		-->
+		<dependency>
+			<groupId>org.apache.camel.springboot</groupId>
+			<artifactId>camel-bean-starter</artifactId>
+		</dependency>
+
+		<!--
+			Camel Log component:
+			Provides the log() DSL step that logs message details at each pipeline
+			stage, which is invaluable for tracing and educational purposes.
+		-->
+		<dependency>
+			<groupId>org.apache.camel.springboot</groupId>
+			<artifactId>camel-log-starter</artifactId>
+		</dependency>
+
+		<!--
+			Camel Direct component:
+			Provides synchronous in-process messaging between routes using
+			direct:<name> endpoints. Used to chain sub-routes (filter stages)
+			without leaving the JVM.
+		-->
+		<dependency>
+			<groupId>org.apache.camel.springboot</groupId>
+			<artifactId>camel-direct-starter</artifactId>
+		</dependency>
+
+		<!--
+			Camel SEDA component:
+			Provides asynchronous in-memory queuing between routes using
+			seda:<name> endpoints with a configurable thread pool. Used for
+			the dead-letter and notification channels in the pipeline.
+		-->
+		<dependency>
+			<groupId>org.apache.camel.springboot</groupId>
+			<artifactId>camel-seda-starter</artifactId>
+		</dependency>
+
+		<!--
+			Camel File component:
+			Allows reading from and writing to the file system. Used in the
+			pipeline to persist processed orders to an output directory.
+		-->
+		<dependency>
+			<groupId>org.apache.camel.springboot</groupId>
+			<artifactId>camel-file-starter</artifactId>
+		</dependency>
+
+		<!--
+			Camel Spring XML configuration:
+			Enables Spring-aware features inside the Camel context such as
+			accessing Spring beans by name from routes.
+		-->
+		<dependency>
+			<groupId>org.apache.camel.springboot</groupId>
+			<artifactId>camel-spring-starter</artifactId>
+		</dependency>
+
+		<!-- ===== Test dependencies ===== -->
+
+		<!--
+			Spring Boot Test:
+			Pulls in JUnit 5, AssertJ, Mockito, MockMvc, and all Spring test
+			infrastructure for unit and integration tests.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Apache Camel Test (JUnit 5):
+			Provides CamelTestSupport, DefaultCamelContext, DefaultExchange, and other
+			Camel-specific testing utilities for verifying route behaviour.
+			Note: groupId is org.apache.camel (core), NOT org.apache.camel.springboot,
+			so it is NOT covered by the camel-spring-boot-bom and needs an explicit version.
+		-->
+		<dependency>
+			<groupId>org.apache.camel</groupId>
+			<artifactId>camel-test-junit5</artifactId>
+			<version>${camel.version}</version>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers JUnit 5 integration:
+			Provides @Testcontainers and @Container annotations for managing Docker
+			container lifecycle alongside JUnit 5 test execution.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!--
+			Testcontainers core:
+			Provides GenericContainer and Wait strategies used to spin up the
+			ActiveMQ Artemis broker container for integration tests.
+		-->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+	</dependencies>
+
+	<build>
+		<plugins>
+			<!-- Spring Boot Maven Plugin: packages the application as an executable fat-jar -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+			<!-- Maven Surefire Plugin: configures test execution for Java 21+.
+			 argLine: EnableDynamicAgentLoading silences ByteBuddy warnings; Xshare:off
+			 avoids CDS conflicts; bytebuddy.experimental needed on Java 25+; add-opens
+			 grants Mockito deep reflection. DOCKER_API_VERSION=1.44 fixes Docker Desktop
+			 29+ which rejects the legacy v1.24 API path that docker-java uses by default.
+		-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>-XX:+EnableDynamicAgentLoading -Xshare:off -Dnet.bytebuddy.experimental=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
+					<environmentVariables>
+						<!-- Ensures docker-java uses API v1.44 (Docker Desktop 29+ requires this) -->
+						<DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+					</environmentVariables>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

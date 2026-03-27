@@ -1,0 +1,89 @@
+# ============================================================================
+# Application configuration for Apache Camel Pipes mini-project
+#
+# All values here can be overridden at runtime via environment variables
+# using Spring Boot's relaxed binding.  For example:
+#   APP_PIPELINE_PRIORITY_THRESHOLD=500
+# overrides app.pipeline.priority-threshold.
+#
+# Docker Compose overrides environment variables for the production-like setup.
+# Testcontainers overrides them in integration tests via @DynamicPropertySource.
+# ============================================================================
+
+spring:
+  application:
+    name: apache-camel-pipes
+
+  # --------------------------------------------------------------------------
+  # ActiveMQ Artemis connection
+  #
+  # In development the embedded broker is used automatically by
+  # spring-boot-starter-artemis (no broker URL needed).
+  # In Docker Compose and integration tests the external/container broker
+  # URL is injected via the SPRING_ARTEMIS_BROKER_URL environment variable.
+  # --------------------------------------------------------------------------
+  artemis:
+    mode: native
+    broker-url: ${SPRING_ARTEMIS_BROKER_URL:tcp://localhost:61616}
+    user: ${SPRING_ARTEMIS_USER:artemis}
+    password: ${SPRING_ARTEMIS_PASSWORD:artemis}
+
+# --------------------------------------------------------------------------
+# Apache Camel configuration
+# --------------------------------------------------------------------------
+camel:
+  springboot:
+    # Name of the Camel context — visible in JMX and logs.
+    name: order-pipeline-context
+    # Whether to load routes from XML files (not used here; we use Java DSL).
+    xml-routes: false
+
+  # Camel servlet mapping — Camel REST DSL routes are exposed under this path.
+  servlet:
+    mapping:
+      context-path: /camel/*
+
+# --------------------------------------------------------------------------
+# Application-specific properties (read by AppProperties)
+# --------------------------------------------------------------------------
+app:
+  pipeline:
+    # Orders with totalAmount >= this value (inclusive) are classified as PRIORITY.
+    # Override per environment: APP_PIPELINE_PRIORITY_THRESHOLD=500
+    priority-threshold: ${APP_PIPELINE_PRIORITY_THRESHOLD:300}
+
+    # VAT rate applied during enrichment stage.
+    # 0.21 = 21 %  (EU standard rate used as default).
+    vat-rate: ${APP_PIPELINE_VAT_RATE:0.21}
+
+  output:
+    # Directory where processed order JSON files are written.
+    # The Camel file component creates this directory if it does not exist.
+    dir: ${APP_OUTPUT_DIR:./output/orders}
+
+  broker:
+    # Artemis broker URL — used as a reference; actual connection is set via spring.artemis.*
+    url: ${SPRING_ARTEMIS_BROKER_URL:tcp://localhost:61616}
+
+# --------------------------------------------------------------------------
+# Spring Boot Actuator
+#
+# Exposes /actuator/health for Docker Compose healthcheck probes.
+# --------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# --------------------------------------------------------------------------
+# Logging
+# --------------------------------------------------------------------------
+logging:
+  level:
+    com.example.camel: INFO
+    org.apache.camel: INFO
+    org.springframework.jms: WARN
