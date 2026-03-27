@@ -1,0 +1,157 @@
+# ============================================================================
+# Docker Compose file for the Keycloak Identity mini-project
+#
+# This file defines a two-service stack:
+#   1. keycloak  — The Keycloak SSO server. Handles all user authentication.
+#                  Runs in development mode with an in-memory H2 database.
+#   2. app       — The Spring Boot backend (this project). Acts as an OAuth2
+#                  Resource Server, validating JWTs issued by Keycloak.
+#
+# How the services interact:
+#   - Users authenticate directly with Keycloak (POST to its token endpoint).
+#   - Keycloak issues a signed JWT access token.
+#   - Clients include the JWT in API requests to the Spring Boot app.
+#   - The Spring Boot app validates the JWT by fetching Keycloak's public keys
+#     from the JWKS URI: http://keycloak:8080/realms/demo-realm/protocol/openid-connect/certs
+#     "keycloak" resolves automatically via Docker Compose's built-in DNS.
+#
+# Port mapping:
+#   - Keycloak:  host 9080 → container 8080  (avoids conflict with other services on 8080)
+#   - App:       host 8082 → container 8082
+#
+# Keycloak admin console:
+#   http://localhost:9080  (admin / admin)
+#
+# Spring Boot app:
+#   http://localhost:8082
+#
+# Usage:
+#   docker compose up --build          # Build the app image and start both services
+#   docker compose up --build -d       # Same, in detached (background) mode
+#   docker compose down                # Stop and remove containers
+#   docker compose logs -f             # Follow logs from all services
+#   docker compose logs -f app         # Follow app logs only
+#   docker compose logs -f keycloak    # Follow Keycloak logs only
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Keycloak SSO Server
+  #
+  # Runs Keycloak in development mode (--start-dev) with an embedded H2
+  # database. In production, you would use a persistent database like PostgreSQL.
+  #
+  # The realm import file (demo-realm.json) is mounted into the container at the
+  # standard Keycloak import path. Keycloak imports the realm automatically on
+  # first startup if it doesn't already exist.
+  #
+  # Key environment variables:
+  #   KEYCLOAK_ADMIN / KEYCLOAK_ADMIN_PASSWORD:
+  #     Sets the initial admin user credentials for the Keycloak admin console.
+  #     Access the admin console at http://localhost:9080
+  #
+  #   KC_HOSTNAME_STRICT / KC_HTTP_ENABLED:
+  #     Development-mode settings that allow plain HTTP and loose hostname checking.
+  #     Do NOT use these settings in production — use HTTPS and strict hostname.
+  #
+  # Health check:
+  #   Polls Keycloak's /health/ready endpoint via curl.
+  #   The Spring Boot app waits for this to be healthy before starting.
+  # --------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: keycloak-identity-sso
+    # start-dev: runs Keycloak in development mode (in-memory H2, HTTP enabled)
+    # --import-realm: tells Keycloak to import any realm files found in /opt/keycloak/data/import/
+    command: start-dev --import-realm
+    environment:
+      # Admin credentials for the Keycloak admin console (http://localhost:9080)
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+
+      # Development-mode settings: allow HTTP (not just HTTPS) and loose hostname
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+
+      # The hostname that Keycloak embeds in the "iss" (issuer) claim of JWTs.
+      # This MUST match the issuer-uri configured in the Spring Boot app.
+      # When running in Docker, external clients reach Keycloak via localhost:9080,
+      # but the Spring Boot app (inside Docker) reaches it via keycloak:8080.
+      # We use localhost:9080 as the canonical issuer because it's the external URL.
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PORT: "9080"
+    volumes:
+      # Mount the realm import file. Keycloak imports it on startup if the realm
+      # does not exist yet. The file defines users, roles, and client configurations.
+      - ./keycloak/demo-realm.json:/opt/keycloak/data/import/demo-realm.json:ro
+    ports:
+      # Map Keycloak's internal port 8080 to host port 9080.
+      # Use 9080 to avoid conflicts with other services that may use 8080.
+      - "9080:8080"
+    healthcheck:
+      # Keycloak 26.x exposes /health/ready at the management port (9000 by default).
+      # This checks that Keycloak has finished starting and is ready to serve requests.
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # --------------------------------------------------------------------------
+  # Spring Boot Application (Keycloak Identity backend)
+  #
+  # Built from the Dockerfile in this project root.
+  # Starts only after Keycloak is healthy to ensure the JWKS URI is available
+  # when Spring Security fetches the public keys at startup.
+  #
+  # Key environment variables:
+  #   SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:
+  #     The URL where Spring Security fetches Keycloak's RSA public keys.
+  #     Inside the Docker network, "keycloak" resolves to the Keycloak container.
+  #
+  #   SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:
+  #     The expected "iss" claim value in every incoming JWT.
+  #     Must match the issuer configured in Keycloak (KC_HOSTNAME:KC_HOSTNAME_PORT).
+  #     Since clients reach Keycloak via localhost:9080, the issuer is set accordingly.
+  #
+  #   KEYCLOAK_SERVER_URL / KEYCLOAK_REALM:
+  #     Used by the PublicController's /api/public/info endpoint to report
+  #     Keycloak connection details to API consumers.
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: keycloak-identity-app
+    ports:
+      # Application is accessible on host port 8082.
+      # Clients call its protected API: GET http://localhost:8082/api/users
+      - "8082:8082"
+    environment:
+      # JWKS URI: inside the Docker network, "keycloak" resolves to the Keycloak container.
+      # Spring Security fetches and caches the public key set from this URL at startup.
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/demo-realm/protocol/openid-connect/certs
+
+      # Issuer URI: the expected "iss" claim value in JWTs.
+      # Keycloak embeds "http://localhost:9080/realms/demo-realm" in every JWT it issues
+      # (because KC_HOSTNAME=localhost and KC_HOSTNAME_PORT=9080).
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://localhost:9080/realms/demo-realm
+
+      # Used in the /api/public/info endpoint to show Keycloak location to consumers
+      KEYCLOAK_SERVER_URL: http://localhost:9080
+      KEYCLOAK_REALM: demo-realm
+
+      JAVA_OPTS: "-Xms128m -Xmx256m"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s

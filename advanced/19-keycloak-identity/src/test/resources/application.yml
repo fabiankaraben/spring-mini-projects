@@ -1,0 +1,51 @@
+# =============================================================================
+# Test application configuration for the Keycloak Identity application.
+#
+# This file overrides the main application.yml during tests. Key changes:
+#   - Server port: 0 (random port to avoid conflicts between parallel test runs)
+#   - JWT JWK Set URI: overridden dynamically by @DynamicPropertySource in the
+#     integration test, pointing to the Keycloak Testcontainer.
+#   - Issuer URI: also overridden dynamically by @DynamicPropertySource.
+#   - Logging: more verbose to aid test debugging.
+# =============================================================================
+
+server:
+  # Random port: each test run gets its own port, avoiding port conflicts.
+  port: 0
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # These placeholder values are overridden at runtime by @DynamicPropertySource
+          # in KeycloakIdentityIntegrationTest, pointing to the Keycloak Testcontainer.
+          # Having placeholder values here prevents Spring from failing to start if
+          # the @DynamicPropertySource hasn't run yet (e.g., in unit tests that load
+          # only partial context).
+          jwk-set-uri: http://localhost:9080/realms/demo-realm/protocol/openid-connect/certs
+          issuer-uri: http://localhost:9080/realms/demo-realm
+
+# Custom Keycloak config — overridden by @DynamicPropertySource in integration tests
+keycloak:
+  server-url: http://localhost:9080
+  realm: demo-realm
+
+# Actuator — same as main config
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# More verbose logging during tests for easier debugging
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.security.oauth2.server.resource: DEBUG
+    com.example.keycloakidentity: DEBUG
+    org.testcontainers: INFO
+    dasniko.testcontainers.keycloak: DEBUG

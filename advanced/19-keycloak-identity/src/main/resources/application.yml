@@ -1,0 +1,96 @@
+# =============================================================================
+# Keycloak Identity Application — main configuration
+#
+# This file configures:
+#   1. Server port (8082 — avoids clashes with Keycloak on 8080)
+#   2. Spring OAuth2 Resource Server JWT settings (Keycloak JWKS URI)
+#   3. Custom Keycloak properties (realm, server URL) used in the info endpoint
+#   4. Spring Boot Actuator endpoints
+#   5. Logging
+# =============================================================================
+
+server:
+  # Port 8082 for the Spring Boot application.
+  # Keycloak itself runs on port 8080 (in Docker) or 9080 (host-mapped).
+  # Using 8082 avoids port conflicts in the Docker Compose setup.
+  port: 8082
+
+spring:
+
+  # ---------------------------------------------------------------------------
+  # Spring Security — OAuth2 Resource Server configuration
+  #
+  # This block configures how Spring Security validates Keycloak-issued JWTs.
+  #
+  # jwk-set-uri: The Keycloak endpoint that exposes the realm's RSA public keys
+  # in JWK (JSON Web Key) Set format. Spring Security fetches this URL at startup
+  # and whenever it encounters a JWT signed with an unknown key ID.
+  #
+  # Key URL pattern for Keycloak: /realms/{realm-name}/protocol/openid-connect/certs
+  #
+  # issuer-uri: The expected value of the "iss" claim in every incoming JWT.
+  # Keycloak sets the issuer to: {server-url}/realms/{realm-name}
+  # If the JWT's "iss" claim doesn't match this value, the token is rejected.
+  #
+  # When running via Docker Compose, "keycloak" is the service hostname within
+  # the Docker network. For local development, use http://localhost:9080.
+  # ---------------------------------------------------------------------------
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Keycloak JWKS URI — where this service fetches Keycloak's public keys.
+          # Overridden by SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+          # environment variable in Docker Compose.
+          jwk-set-uri: http://localhost:9080/realms/demo-realm/protocol/openid-connect/certs
+
+          # Issuer URI — must match the "iss" claim in Keycloak JWTs.
+          # For Keycloak: {server-url}/realms/{realm-name}
+          # Overridden by SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+          # environment variable in Docker Compose.
+          issuer-uri: http://localhost:9080/realms/demo-realm
+
+# -----------------------------------------------------------------------------
+# Custom Keycloak configuration properties
+#
+# These values are injected into PublicController via @Value to show the
+# Keycloak connection details in the /api/public/info response.
+# They are informational only — the actual JWT validation uses the
+# spring.security.oauth2.resourceserver.jwt.* settings above.
+# -----------------------------------------------------------------------------
+keycloak:
+  # The Keycloak server URL (no trailing slash).
+  # For local development: http://localhost:9080
+  # In Docker Compose: http://keycloak:8080 (internal) or http://localhost:9080 (host)
+  server-url: http://localhost:9080
+
+  # The Keycloak realm name that contains the users and clients for this application.
+  # A Keycloak realm is an isolated namespace — each application typically has its own realm.
+  realm: demo-realm
+
+# -----------------------------------------------------------------------------
+# Spring Boot Actuator
+#
+# Exposes health and info endpoints.
+# The health endpoint is used by Docker Compose healthcheck probes.
+# -----------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+logging:
+  level:
+    # Spring Security filter chain — DEBUG shows every security decision
+    org.springframework.security: INFO
+    # OAuth2 Resource Server JWT validation — DEBUG shows token decoding details
+    org.springframework.security.oauth2.server.resource: INFO
+    # Application-level logging
+    com.example.keycloakidentity: DEBUG
