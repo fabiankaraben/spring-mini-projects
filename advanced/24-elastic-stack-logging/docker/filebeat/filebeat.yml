@@ -1,0 +1,94 @@
+# =============================================================================
+# Filebeat configuration for the Elastic Stack Logging mini-project
+#
+# Filebeat is a lightweight log shipper written in Go. It tails log files and
+# forwards each line to Logstash (or directly to Elasticsearch).
+#
+# Pipeline role:
+#   Spring Boot app writes JSON log lines → /var/log/app/app.json (shared volume)
+#   Filebeat tails that file → Logstash :5044 (Beats protocol)
+#   Logstash processes → Elasticsearch
+#
+# Why Filebeat instead of writing directly to Logstash/Elasticsearch from the app?
+#   - Decouples the application from the logging infrastructure.
+#   - If Logstash is temporarily down, Filebeat buffers events and retries.
+#   - The application only needs to write a file — no network configuration,
+#     no authentication, no dependency on Logstash's availability at startup.
+# =============================================================================
+
+# Filebeat version hint — must match the Filebeat image version
+filebeat.config.modules:
+  path: ${path.config}/modules.d/*.yml
+  reload.enabled: false
+
+# -----------------------------------------------------------------------------
+# INPUTS: which files to tail
+#
+# We tail the JSON log file written by the Spring Boot application.
+# The path must match the Docker volume mount and the logback-spring.xml config.
+# -----------------------------------------------------------------------------
+filebeat.inputs:
+
+  - type: log
+    enabled: true
+
+    # Path to the JSON log file — mounted from the app container via a Docker volume.
+    # Wildcard allows tailing both the active file and any rolled-over daily files.
+    paths:
+      - /var/log/app/app*.json
+
+    # Tell Filebeat to treat each line as JSON and decode it.
+    # This makes the structured fields available to Logstash without an extra
+    # JSON parse step (though we still parse in Logstash for field promotion).
+    json.keys_under_root: true
+    json.overwrite_keys: true
+    json.add_error_key: true
+
+    # Multiline settings: some log lines (e.g., stack traces) span multiple lines
+    # in standard Logback output, but with LogstashEncoder every event is ONE line
+    # of valid JSON. We disable multiline processing here.
+    # If you were using a pattern-based encoder instead of JSON, you would need:
+    #   multiline.pattern: '^{'
+    #   multiline.negate: true
+    #   multiline.match: after
+
+    # Tag every event with the application name for easy filtering in Kibana
+    tags: ["elastic-stack-logging", "spring-boot"]
+
+    # Add static fields to every event from this input
+    fields:
+      environment: docker-compose
+      log_type: application
+
+# -----------------------------------------------------------------------------
+# OUTPUT: forward events to Logstash
+#
+# Using the Beats protocol (port 5044) — Logstash must have a beats input plugin
+# configured (see docker/logstash/pipeline/logstash.conf).
+#
+# hosts: uses the Docker Compose service name "logstash" which resolves via
+#         Docker's internal DNS to the Logstash container's IP address.
+# -----------------------------------------------------------------------------
+output.logstash:
+  hosts: ["logstash:5044"]
+
+  # Retry configuration: if Logstash is temporarily unavailable, Filebeat
+  # will retry sending buffered events up to max_retries times.
+  bulk_max_size: 2048
+
+# -----------------------------------------------------------------------------
+# Logging configuration for Filebeat itself
+#
+# Filebeat writes its own operational logs to stderr (captured by Docker).
+# Set to "info" for production; use "debug" to troubleshoot pipeline issues.
+# -----------------------------------------------------------------------------
+logging.level: info
+logging.to_stderr: true
+
+# -----------------------------------------------------------------------------
+# Monitoring (optional)
+# Disabling built-in monitoring since we don't have a monitoring Elasticsearch
+# cluster configured. In production you would enable this to track Filebeat's
+# own metrics in Kibana.
+# -----------------------------------------------------------------------------
+monitoring.enabled: false

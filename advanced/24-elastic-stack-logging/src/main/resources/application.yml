@@ -1,0 +1,51 @@
+# ============================================================================
+# Application configuration for the Elastic Stack Logging mini-project
+#
+# This file configures:
+#   - The HTTP server port
+#   - Spring application name (used in JSON log events as the "application" field)
+#   - Spring Boot Actuator endpoints
+#   - Logging levels
+# ============================================================================
+
+spring:
+  application:
+    # This name appears in every JSON log event as the "application" field,
+    # set by the LogstashEncoder customFields in logback-spring.xml.
+    # It lets Kibana distinguish logs from different microservices when they
+    # share the same Elasticsearch index.
+    name: elastic-stack-logging
+
+server:
+  port: 8080
+
+# --------------------------------------------------------------------------
+# Spring Boot Actuator
+#
+# Exposes the /actuator/health endpoint used by Docker Compose healthcheck
+# probes to determine when the Spring Boot application is ready.
+# --------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# --------------------------------------------------------------------------
+# Logging
+#
+# The actual JSON formatting is handled by logback-spring.xml.
+# These level overrides complement the logback configuration by suppressing
+# verbose output from Spring internals and third-party libraries.
+# --------------------------------------------------------------------------
+logging:
+  level:
+    root: INFO
+    com.example.elasticlogging: DEBUG
+    org.springframework.web: WARN
+    # Show only WARN+ from docker-java (used by Testcontainers) to reduce noise
+    com.github.dockerjava: WARN
+    org.testcontainers: INFO

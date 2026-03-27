@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  =============================================================================
+  Logback configuration for the Elastic Stack Logging mini-project
+  =============================================================================
+
+  This file configures two appenders:
+
+  1. CONSOLE  - Human-readable coloured output for local development and tests.
+               Uses Spring Boot's PatternLayout with %clr colour support.
+
+  2. JSON_FILE - Machine-readable JSON output for the Elastic Stack pipeline.
+               Uses LogstashEncoder from logstash-logback-encoder which
+               serialises every ILoggingEvent to a single JSON line:
+               {
+                 "@timestamp": "2024-01-01T00:00:00.000Z",
+                 "@version": "1",
+                 "message": "Order created",
+                 "logger_name": "...OrderService",
+                 "thread_name": "http-nio-8080-exec-1",
+                 "level": "INFO",
+                 "level_value": 20000,
+                 "orderId": "abc-123",      (from StructuredArguments.kv)
+                 "customerId": "c-001",     (from StructuredArguments.kv)
+                 "requestId": "req-uuid",   (from MDC field)
+                 "stack_trace": "..."       (only present for exceptions)
+               }
+               Active only when the "docker" Spring profile is active.
+               The /var/log/app directory is only available inside the Docker
+               container (created by the Dockerfile and mounted as a volume).
+
+  The JSON file is mounted as a Docker volume so Filebeat can tail it.
+  Filebeat ships the lines to Logstash, which forwards to Elasticsearch.
+  =============================================================================
+-->
+<configuration>
+
+    <!--
+        Include Spring Boot's default Logback configuration.
+        This registers the %clr() conversion word (colour support) and other
+        Spring Boot-specific conversion rules. Without this include, using %clr
+        in a pattern causes "no conversion class registered for [clr]" errors.
+    -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- Import the application name from Spring properties for use in JSON logs -->
+    <springProperty scope="context" name="appName" source="spring.application.name"
+                    defaultValue="elastic-stack-logging"/>
+
+    <!-- =========================================================================
+         CONSOLE appender - human-readable output for local development and tests
+         =========================================================================
+         Active in all profiles (including tests). Uses %clr colour codes
+         registered by Spring Boot's defaults.xml include above.
+    ========================================================================= -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!--
+                %clr()       = colour the enclosed text (Spring Boot extension)
+                %d{HH:mm:ss} = time (hours:minutes:seconds)
+                %-5level     = log level padded to 5 chars (e.g. "INFO ", "WARN ")
+                %logger{36}  = logger class name truncated to 36 chars
+                %msg         = the log message
+                %n           = platform-specific newline
+                %ex          = exception stack trace (empty if no exception)
+            -->
+            <pattern>%clr(%d{HH:mm:ss.SSS}){faint} %clr(%-5level){highlight} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} : %msg%n%ex</pattern>
+        </encoder>
+    </appender>
+
+    <!-- =========================================================================
+         JSON_FILE appender - structured JSON output for the Elastic Stack
+         =========================================================================
+         Active only when the "docker" Spring profile is active. This profile
+         is set via SPRING_PROFILES_ACTIVE=docker in docker-compose.yml.
+
+         Writes one JSON object per log line to /var/log/app/app.json.
+         This file path is:
+           - Created by the Dockerfile (RUN mkdir -p /var/log/app)
+           - Mounted as a Docker volume shared with the Filebeat container
+           - Configured as the Filebeat input path in docker/filebeat/filebeat.yml
+
+         LogstashEncoder adds all StructuredArguments.kv() values and all MDC
+         entries as top-level fields in the JSON object automatically.
+
+         RollingPolicy ensures the file does not grow unbounded:
+           - Daily rollover
+           - Maximum 10 backup files kept
+           - Maximum total log size: 1 GB
+    ========================================================================= -->
+    <springProfile name="docker">
+        <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <!-- Active log file path — must match Filebeat's input paths config -->
+            <file>/var/log/app/app.json</file>
+
+            <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+                <!-- Rolled-over files: app-2024-01-01.json, app-2024-01-02.json, ... -->
+                <fileNamePattern>/var/log/app/app-%d{yyyy-MM-dd}.json</fileNamePattern>
+                <!-- Keep at most 10 daily rolled-over files -->
+                <maxHistory>10</maxHistory>
+                <!-- Cap total size of all log files at 1 GB -->
+                <totalSizeCap>1GB</totalSizeCap>
+            </rollingPolicy>
+
+            <!--
+                LogstashEncoder: the core of this project's logging strategy.
+
+                It serialises each Logback ILoggingEvent to a JSON line containing:
+                  - Standard fields: @timestamp, @version, message, level, logger_name,
+                                     thread_name, level_value
+                  - MDC fields: any key/value pairs placed in MDC are top-level fields
+                               (e.g. requestId, userId, failedOrderId)
+                  - StructuredArguments: kv("orderId", "abc") becomes "orderId":"abc"
+                                         as a top-level JSON field
+                  - Exception: stack_trace field is added when an exception is logged
+
+                This JSON format means Logstash can index documents without a grok
+                parser — the data is already structured.
+            -->
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <!--
+                    customFields: static key/value pairs added to every JSON event.
+                    "application" lets Kibana filter logs by service name when
+                    multiple applications write to the same Elasticsearch index.
+                -->
+                <customFields>{"application":"${appName}"}</customFields>
+            </encoder>
+        </appender>
+
+        <!-- Attach JSON_FILE appender to the root logger (docker profile only) -->
+        <root level="INFO">
+            <appender-ref ref="JSON_FILE"/>
+        </root>
+
+        <!-- Also attach JSON_FILE to our application package logger (docker profile only) -->
+        <logger name="com.example.elasticlogging" level="DEBUG" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="JSON_FILE"/>
+        </logger>
+    </springProfile>
+
+    <!-- =========================================================================
+         Root logger - applies to all packages in all profiles
+         =========================================================================
+         Level INFO ensures we capture all normal business events without the
+         verbose DEBUG output from third-party libraries.
+         CONSOLE appender is always active (tests and Docker both use it).
+    ========================================================================= -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <!-- =========================================================================
+         Package-level logger overrides - active in all profiles
+         =========================================================================
+         Set DEBUG for our own application code so we can see detailed operational
+         logs. In the "docker" profile the springProfile block above also attaches
+         JSON_FILE to this logger.
+    ========================================================================= -->
+    <logger name="com.example.elasticlogging" level="DEBUG"/>
+
+    <!-- Suppress verbose library output that adds noise without value -->
+    <logger name="org.springframework.web" level="WARN"/>
+    <logger name="org.hibernate" level="WARN"/>
+    <logger name="com.zaxxer.hikari" level="WARN"/>
+
+</configuration>

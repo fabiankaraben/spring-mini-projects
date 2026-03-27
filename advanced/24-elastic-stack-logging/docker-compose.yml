@@ -1,0 +1,227 @@
+# ============================================================================
+# Docker Compose file for the Elastic Stack Logging mini-project
+#
+# This file defines a five-service stack:
+#   1. elasticsearch  — Search and analytics engine; stores and indexes log data.
+#   2. kibana         — Web UI for visualising and querying logs in Elasticsearch.
+#   3. logstash       — Data processing pipeline; receives events from Filebeat,
+#                       parses/enriches them, and sends to Elasticsearch.
+#   4. filebeat       — Lightweight log shipper; tails the app's JSON log file
+#                       and forwards events to Logstash.
+#   5. app            — The Spring Boot application; writes JSON logs to a
+#                       shared volume that Filebeat tails.
+#
+# Log pipeline flow:
+#   app → /var/log/app/app.json (shared volume)
+#         ↑ tailed by Filebeat
+#   filebeat → logstash:5044 (Beats protocol)
+#   logstash → elasticsearch:9200 (REST)
+#   kibana   → elasticsearch:9200 (REST, for display)
+#
+# Port mappings (host:container):
+#   Spring Boot app:    8080:8080
+#   Elasticsearch:      9200:9200
+#   Kibana:             5601:5601
+#   Logstash Beats:     5044:5044 (internal, not exposed to host by default)
+#
+# Usage:
+#   docker compose up --build          # Build app image and start all services
+#   docker compose up --build -d       # Same, detached (background) mode
+#   docker compose down                # Stop and remove containers
+#   docker compose down -v             # Stop containers AND remove data volumes
+#   docker compose logs -f             # Follow logs from all services
+#   docker compose logs -f app         # Follow app logs only
+#   docker compose logs -f logstash    # Follow Logstash logs only
+#
+# Note: Testcontainers (used in integration tests) does NOT use this file.
+# Run tests separately with: ./mvnw clean test
+# ============================================================================
+
+# All services use ELK stack version 8.13.0.
+# Pin all services to the SAME version to avoid compatibility issues between
+# Elasticsearch, Kibana, Logstash, and Filebeat.
+x-elk-version: &elk-version "8.13.0"
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Elasticsearch — search and analytics engine
+  #
+  # Stores log events as JSON documents in daily indices (app-logs-2024.01.15).
+  # Logstash writes to it; Kibana reads from it.
+  #
+  # Key settings:
+  #   discovery.type=single-node     — run as a standalone node (not a cluster).
+  #   xpack.security.enabled=false   — disable TLS/auth for simplicity in dev.
+  #   ES_JAVA_OPTS=-Xms512m -Xmx512m — cap heap to 512 MB (fits on most dev machines).
+  # --------------------------------------------------------------------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:*elk-version
+    container_name: elastic-elasticsearch
+    environment:
+      # Run as a single-node cluster — no need for cluster formation in dev
+      - discovery.type=single-node
+      # Disable X-Pack security (TLS + authentication) for development simplicity
+      - xpack.security.enabled=false
+      # Cap the JVM heap — Elasticsearch defaults to 50% of available RAM which
+      # can be too much on developer machines
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      # Expose Elasticsearch REST API for direct queries and Kibana/Logstash
+      - "9200:9200"
+    volumes:
+      # Persist index data across container restarts
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      # Poll the cluster health endpoint; "green" or "yellow" means ready
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # --------------------------------------------------------------------------
+  # Kibana — web UI for Elasticsearch
+  #
+  # Provides dashboards, search, and visualisations for the indexed log data.
+  # Access at: http://localhost:5601
+  #
+  # Quick start in Kibana:
+  #   1. Open http://localhost:5601
+  #   2. Go to Stack Management → Index Patterns → Create index pattern
+  #   3. Enter "app-logs-*" as the pattern, select @timestamp as the time field
+  #   4. Go to Discover to search and visualise logs
+  # --------------------------------------------------------------------------
+  kibana:
+    image: docker.elastic.co/kibana/kibana:*elk-version
+    container_name: elastic-kibana
+    environment:
+      # Connect to Elasticsearch using the Docker Compose internal service name
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:5601/api/status | grep -q '\"overall\"' || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
+  # --------------------------------------------------------------------------
+  # Logstash — data processing pipeline
+  #
+  # Receives log events from Filebeat (Beats protocol, port 5044), parses and
+  # enriches them, then forwards to Elasticsearch.
+  #
+  # Key configuration:
+  #   - Pipeline definition: docker/logstash/pipeline/logstash.conf
+  #   - Beats input: port 5044
+  #   - Output: http://elasticsearch:9200
+  #
+  # LS_JAVA_OPTS: cap heap to avoid OOM on developer machines.
+  # --------------------------------------------------------------------------
+  logstash:
+    image: docker.elastic.co/logstash/logstash:*elk-version
+    container_name: elastic-logstash
+    environment:
+      - LS_JAVA_OPTS=-Xms256m -Xmx256m
+      # Pass the Elasticsearch URL as an environment variable so the pipeline
+      # config (logstash.conf) can reference it via ${ELASTICSEARCH_HOSTS}
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      # Beats protocol port — Filebeat sends events here
+      - "5044:5044"
+    volumes:
+      # Mount the Logstash pipeline configuration file
+      - ./docker/logstash/pipeline:/usr/share/logstash/pipeline:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9600/_node/stats | grep -q 'logstash' || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # --------------------------------------------------------------------------
+  # Filebeat — lightweight log shipper
+  #
+  # Tails the Spring Boot application's JSON log file and forwards events to
+  # Logstash using the Beats protocol.
+  #
+  # The app-logs volume is shared between the app service (which writes to it)
+  # and Filebeat (which reads from it). This decouples log writing from log
+  # shipping — the app writes a file, Filebeat handles the rest.
+  #
+  # Note: Filebeat requires its configuration file to be owned by root and not
+  # group/world-writable. The "user: root" setting ensures this.
+  # --------------------------------------------------------------------------
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:*elk-version
+    container_name: elastic-filebeat
+    # Filebeat requires the config file to be owned by root (or the running user)
+    # and not group-writable. Running as root satisfies this requirement.
+    user: root
+    volumes:
+      # Mount the Filebeat configuration file
+      - ./docker/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      # Mount the shared log volume — Filebeat reads, app writes
+      - app-logs:/var/log/app:ro
+      # Mount Docker socket so Filebeat can collect container metadata (optional)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      logstash:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+
+  # --------------------------------------------------------------------------
+  # Spring Boot Application — the log producer
+  #
+  # Writes JSON-formatted log events to /var/log/app/app.json via
+  # logstash-logback-encoder + logback-spring.xml configuration.
+  #
+  # The /var/log/app directory is a named Docker volume shared with Filebeat.
+  # Every log line written by the app is immediately visible to Filebeat.
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: elastic-app
+    ports:
+      - "8080:8080"
+    volumes:
+      # Named volume shared with Filebeat — app writes here, Filebeat reads here
+      - app-logs:/var/log/app
+    environment:
+      # Activate the "docker" Spring profile so logback-spring.xml enables the
+      # JSON_FILE appender that writes to /var/log/app/app.json (tailed by Filebeat)
+      SPRING_PROFILES_ACTIVE: docker
+      JAVA_OPTS: "-Xms128m -Xmx256m"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+# ----------------------------------------------------------------------------
+# Named volumes
+#
+# elasticsearch-data: Persists Elasticsearch indices across container restarts.
+#   Survives `docker compose down` but is removed by `docker compose down -v`.
+#
+# app-logs: Shared volume between the app (writer) and Filebeat (reader).
+#   Contains the JSON log files produced by logstash-logback-encoder.
+# ----------------------------------------------------------------------------
+volumes:
+  elasticsearch-data:
+  app-logs:

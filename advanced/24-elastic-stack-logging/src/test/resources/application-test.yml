@@ -1,0 +1,25 @@
+# ============================================================================
+# Test application configuration
+#
+# This file is loaded when the "test" Spring profile is active.
+# Integration tests use Testcontainers to start a real Elasticsearch instance.
+# The application-level logging configuration is kept intact so that the JSON
+# log output format is tested end-to-end.
+# ============================================================================
+
+spring:
+  application:
+    name: elastic-stack-logging-test
+
+# --------------------------------------------------------------------------
+# Logging overrides for tests
+#
+# Keep our application code at DEBUG so we can diagnose test failures,
+# but suppress noisy output from Testcontainers and Docker infrastructure.
+# --------------------------------------------------------------------------
+logging:
+  level:
+    com.example.elasticlogging: DEBUG
+    org.testcontainers: INFO
+    com.github.dockerjava: WARN
+    org.springframework.web: WARN
